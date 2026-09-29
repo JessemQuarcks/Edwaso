@@ -1,10 +1,9 @@
 import mongoose from 'mongoose';
 import { connectDB } from './config/db.js';
-import User from './models/User.js';
 import Product, { type IProduct } from './models/Product.js';
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? 'admin@example.com';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'admin12345';
+// Seeds sample products only. Admin accounts are never seeded with a known password;
+// use the admin CLI (src/scripts/admin.ts) instead.
 
 type SeedProduct = Pick<IProduct, 'name' | 'category' | 'price' | 'stock' | 'description' | 'image'>;
 
@@ -22,15 +21,6 @@ await connectDB();
 await Product.deleteMany({});
 await Product.insertMany(products);
 console.log(`Seeded ${products.length} products`);
-
-if (!(await User.exists({ email: ADMIN_EMAIL }))) {
-  await User.create({
-    name: 'Admin',
-    email: ADMIN_EMAIL,
-    password: ADMIN_PASSWORD,
-    isAdmin: true,
-  });
-  console.log(`Created admin user ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
-}
+console.log('Create an admin account with: npm run admin -- create --email you@example.com');
 
 await mongoose.disconnect();

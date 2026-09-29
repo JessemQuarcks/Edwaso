@@ -1,37 +1,24 @@
-import jwt from 'jsonwebtoken';
-import type { Request, RequestHandler } from 'express';
+import type { Request } from 'express';
 import User, { type UserDoc } from '../models/User.js';
+import { AUDIENCE, verifyToken } from '../lib/tokens.js';
 import { asyncHandler, HttpError } from './error.js';
 
-export interface TokenPayload {
-  id: string;
-}
-
+// Storefront (customer) authentication: a Bearer JWT. The admin console never accepts
+// these tokens; it has its own cookie session (middleware/adminSession.ts).
 export const protect = asyncHandler(async (req, _res, next) => {
   const header = req.headers.authorization ?? '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) throw new HttpError(401, 'Not authenticated');
 
-  const secret = process.env.JWT_SECRET;
-  if (!secret) throw new Error('JWT_SECRET is not set');
+  const claims = verifyToken(token, AUDIENCE.customer);
+  if (!claims) throw new HttpError(401, 'Invalid or expired token');
 
-  let payload: TokenPayload;
-  try {
-    payload = jwt.verify(token, secret) as TokenPayload;
-  } catch {
-    throw new HttpError(401, 'Invalid or expired token');
-  }
-
-  const user = await User.findById(payload.id);
-  if (!user) throw new HttpError(401, 'User no longer exists');
+  const user = await User.findById(claims.sub);
+  if (!user || user.tokenVersion !== claims.tv) throw new HttpError(401, 'Session is no longer valid');
+  if (user.status !== 'active') throw new HttpError(403, 'Account disabled');
   req.user = user;
   next();
 });
-
-export const adminOnly: RequestHandler = (req, _res, next) => {
-  if (!req.user?.isAdmin) return next(new HttpError(403, 'Admin access required'));
-  next();
-};
 
 /** Narrows `req.user` for handlers that run behind `protect`. */
 export function requireUser(req: Request): UserDoc {

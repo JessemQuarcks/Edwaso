@@ -8,13 +8,17 @@
     "build": "tsc",
     "start": "node --env-file=.env dist/index.js",
     "seed": "tsx --env-file=.env src/seed.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p test",
+    "admin": "tsx --env-file=.env src/scripts/admin.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "engines": {
     "node": ">=20.6"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
@@ -22,16 +26,25 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.9.0",
     "morgan": "^1.10.0",
-    "stripe": "^17.5.0"
+    "otplib": "^12.0.1",
+    "qrcode": "^1.5.4",
+    "stripe": "^17.5.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/morgan": "^1.9.9",
     "@types/node": "^22.10.2",
+    "@types/qrcode": "^1.5.6",
+    "@types/supertest": "^7.2.1",
+    "mongodb-memory-server": "^11.3.0",
+    "supertest": "^7.3.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^5.0.2"
   }
 }

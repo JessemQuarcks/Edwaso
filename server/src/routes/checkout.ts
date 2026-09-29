@@ -4,6 +4,8 @@ import Product from '../models/Product.js';
 import Order, { type IOrderItem } from '../models/Order.js';
 import { protect, requireUser } from '../middleware/auth.js';
 import { asyncHandler, HttpError } from '../middleware/error.js';
+import { objectIdSchema, parse } from '../middleware/validate.js';
+import { z } from 'zod';
 import { getStripe } from '../config/stripe.js';
 
 const router = Router();
@@ -12,30 +14,25 @@ const CURRENCY = process.env.CURRENCY ?? 'usd';
 const MAX_LINE_ITEMS = 50;
 const MAX_QUANTITY = 99;
 
-interface CartItemInput {
-  productId: string;
-  quantity: number;
-}
+const cartSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        productId: objectIdSchema,
+        quantity: z.number().int().min(1).max(MAX_QUANTITY),
+      }),
+      { error: 'Cart is empty' }
+    )
+    .min(1, 'Cart is empty')
+    .max(MAX_LINE_ITEMS, 'Too many items'),
+});
 
 function parseCart(body: unknown): Map<string, number> {
-  const { items } = (body ?? {}) as { items?: unknown };
-  if (!Array.isArray(items) || items.length === 0) throw new HttpError(400, 'Cart is empty');
-  if (items.length > MAX_LINE_ITEMS) throw new HttpError(400, 'Too many items');
-
-  // Merge duplicate product ids and validate quantities.
+  const { items } = parse(cartSchema, body ?? {});
+  // Merge duplicate product ids.
   const quantities = new Map<string, number>();
-  for (const raw of items) {
-    const item = raw as Partial<CartItemInput>;
-    const qty = Number(item?.quantity);
-    if (
-      typeof item?.productId !== 'string' ||
-      !Number.isInteger(qty) ||
-      qty < 1 ||
-      qty > MAX_QUANTITY
-    ) {
-      throw new HttpError(400, 'Invalid cart item');
-    }
-    quantities.set(item.productId, (quantities.get(item.productId) ?? 0) + qty);
+  for (const { productId, quantity } of items) {
+    quantities.set(productId, (quantities.get(productId) ?? 0) + quantity);
   }
   return quantities;
 }

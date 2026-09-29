@@ -1,38 +1,28 @@
 import { Router } from 'express';
 import type { FilterQuery } from 'mongoose';
+import { z } from 'zod';
 import Product, { type IProduct } from '../models/Product.js';
-import { protect, adminOnly } from '../middleware/auth.js';
 import { asyncHandler, HttpError } from '../middleware/error.js';
+import { parse } from '../middleware/validate.js';
 
+// Public catalogue. Writes live under /api/admin/products.
 const router = Router();
 
-const FIELDS = ['name', 'description', 'price', 'image', 'category', 'stock'] as const;
-type ProductField = (typeof FIELDS)[number];
-
-// Whitelist the writable fields; Mongoose validates the values.
-function pick(body: unknown): Partial<Record<ProductField, unknown>> {
-  const input = (body ?? {}) as Record<string, unknown>;
-  return Object.fromEntries(FIELDS.filter((f) => f in input).map((f) => [f, input[f]]));
-}
-
-const toInt = (value: unknown, fallback: number): number => {
-  const n = parseInt(String(value), 10);
-  return Number.isNaN(n) ? fallback : n;
-};
+const listQuery = z.object({
+  page: z.coerce.number().int().min(1).catch(1),
+  limit: z.coerce.number().int().min(1).max(50).catch(12),
+  category: z.string().trim().optional().catch(undefined),
+  q: z.string().trim().max(200).optional().catch(undefined),
+});
 
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const page = Math.max(toInt(req.query.page, 1), 1);
-    const limit = Math.min(Math.max(toInt(req.query.limit, 12), 1), 50);
+    const { page, limit, category, q } = parse(listQuery, req.query);
 
     const filter: FilterQuery<IProduct> = {};
-    if (typeof req.query.category === 'string' && req.query.category) {
-      filter.category = req.query.category;
-    }
-    if (typeof req.query.q === 'string' && req.query.q) {
-      filter.$text = { $search: req.query.q };
-    }
+    if (category) filter.category = category;
+    if (q) filter.$text = { $search: q };
 
     const [products, total] = await Promise.all([
       Product.find(filter)
@@ -58,41 +48,6 @@ router.get(
     const product = await Product.findById(req.params.id);
     if (!product) throw new HttpError(404, 'Product not found');
     res.json({ product });
-  })
-);
-
-router.post(
-  '/',
-  protect,
-  adminOnly,
-  asyncHandler(async (req, res) => {
-    const product = await Product.create(pick(req.body));
-    res.status(201).json({ product });
-  })
-);
-
-router.put(
-  '/:id',
-  protect,
-  adminOnly,
-  asyncHandler(async (req, res) => {
-    const product = await Product.findByIdAndUpdate(req.params.id, pick(req.body), {
-      new: true,
-      runValidators: true,
-    });
-    if (!product) throw new HttpError(404, 'Product not found');
-    res.json({ product });
-  })
-);
-
-router.delete(
-  '/:id',
-  protect,
-  adminOnly,
-  asyncHandler(async (req, res) => {
-    const product = await Product.findByIdAndDelete(req.params.id);
-    if (!product) throw new HttpError(404, 'Product not found');
-    res.json({ message: 'Product deleted' });
   })
 );
 

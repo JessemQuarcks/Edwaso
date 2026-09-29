@@ -1,11 +1,13 @@
 import type { UserDoc } from '../models/User.js';
+import type { AdminSessionDoc } from '../models/AdminSession.js';
 
-// `protect` attaches the authenticated user; routes read it through `requireUser(req)`,
-// which narrows it to a non-optional UserDoc.
 declare global {
   namespace Express {
     interface Request {
+      // `protect` attaches the storefront user; routes read it through `requireUser(req)`.
       user?: UserDoc;
+      // `requireAdminSession` attaches the admin and their session; read via `requireAdmin(req)`.
+      admin?: { user: UserDoc; session: AdminSessionDoc };
     }
   }
 }
