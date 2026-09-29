@@ -1,11 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import Link from 'next/link';
-import { AlertCircle, Loader2, Lock, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { AlertCircle, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { api, errorMessage, formatPrice } from '@/lib/api';
+import { adminApi } from '@/lib/admin-api';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
@@ -33,7 +33,6 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
-import { useAuth } from '@/components/Providers';
 import type { Order, OrderStatus, OrdersResponse, Product, ProductsResponse } from '@/types';
 
 // The form holds strings (raw input values); numbers are parsed on submit.
@@ -62,8 +61,8 @@ const SETTABLE_STATUSES: OrderStatus[] = ['paid', 'shipped', 'cancelled'];
 const customerEmail = (order: Order): string =>
   typeof order.user === 'string' ? order.user : order.user.email;
 
+// Access is enforced by the (console) layout and, for every request, by the admin API.
 export default function AdminPage() {
-  const { user, ready } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [form, setForm] = useState<ProductForm>(EMPTY);
@@ -75,7 +74,7 @@ export default function AdminPage() {
     try {
       const [p, o] = await Promise.all([
         api<ProductsResponse>('/products?limit=50'),
-        api<OrdersResponse>('/orders', { auth: true }),
+        adminApi<OrdersResponse>('/orders'),
       ]);
       setProducts(p.products);
       setOrders(o.orders);
@@ -85,22 +84,8 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    if (user?.isAdmin) void load();
-  }, [user, load]);
-
-  if (!ready) return null;
-
-  if (!user?.isAdmin) {
-    return (
-      <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed py-20 text-center">
-        <Lock className="size-10 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">You need an admin account to view this page.</p>
-        <Link href="/login?next=/admin" className={buttonVariants({ size: 'sm' })}>
-          Log in
-        </Link>
-      </div>
-    );
-  }
+    void load();
+  }, [load]);
 
   const set =
     (key: keyof ProductForm) =>
@@ -117,8 +102,8 @@ export default function AdminPage() {
       stock: parseInt(form.stock, 10),
     };
     try {
-      if (editingId) await api(`/products/${editingId}`, { method: 'PUT', auth: true, body });
-      else await api('/products', { method: 'POST', auth: true, body });
+      if (editingId) await adminApi(`/products/${editingId}`, { method: 'PUT', body });
+      else await adminApi('/products', { method: 'POST', body });
       setForm(EMPTY);
       setEditingId(null);
       await load();
@@ -145,7 +130,7 @@ export default function AdminPage() {
   async function remove(id: string) {
     if (!confirm('Delete this product?')) return;
     try {
-      await api(`/products/${id}`, { method: 'DELETE', auth: true });
+      await adminApi(`/products/${id}`, { method: 'DELETE' });
       await load();
     } catch (err) {
       setError(errorMessage(err));
@@ -154,7 +139,7 @@ export default function AdminPage() {
 
   async function setStatus(id: string, status: OrderStatus) {
     try {
-      await api(`/orders/${id}/status`, { method: 'PATCH', auth: true, body: { status } });
+      await adminApi(`/orders/${id}/status`, { method: 'PATCH', body: { status } });
       await load();
     } catch (err) {
       setError(errorMessage(err));
@@ -164,7 +149,7 @@ export default function AdminPage() {
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Admin</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Catalog &amp; orders</h1>
         <p className="text-sm text-muted-foreground">Manage the catalog and fulfil orders.</p>
       </div>
 

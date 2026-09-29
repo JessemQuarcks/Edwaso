@@ -15,50 +15,50 @@ Where the app is today, and what it takes to get to a polished storefront plus a
 
 ---
 
-## Phase 0: Foundations (≈1–2 days)
+## Phase 0: Foundations (≈1–2 days) · ✅ done except shared types
 
 Do this before touching features so every later phase is safer.
 
-- [ ] `git init` and make a first commit. `.gitignore` already excludes `.env`.
-- [ ] Add **zod** to the server for request validation. Replace the hand-rolled `typeof` checks in `auth.ts`, `products.ts` and `checkout.ts`.
-- [ ] Add a test harness: **vitest + supertest + mongodb-memory-server** on the server, then smoke-test the auth, checkout and webhook flows.
-- [ ] Share types. Move the API response types into a `shared/` package, or generate them from the zod schemas, so `client/types/index.ts` stops drifting.
-- [ ] Wire up the dark-mode toggle. The tokens already exist in `globals.css`, and the admin panel will benefit.
+- [x] `git init` and make a first commit. `.gitignore` already excludes `.env`.
+- [x] Add **zod** to the server for request validation. Replace the hand-rolled `typeof` checks in `auth.ts`, `products.ts` and `checkout.ts`.
+- [x] Add a test harness: **vitest + supertest + mongodb-memory-server** on the server, then smoke-test the auth, checkout and webhook flows.
+- [ ] Share types. Move the API response types into a `shared/` package, or generate them from the zod schemas, so `client/types/index.ts` stops drifting. *Deferred: needs a workspace setup; admin types are hand-kept in `client/types/admin.ts` for now.*
+- [x] Wire up the dark-mode toggle. The tokens already exist in `globals.css`, and the admin panel will benefit.
 
 ---
 
-## Phase 1: Admin authentication done right (≈3–4 days) · **highest priority**
+## Phase 1: Admin authentication done right (≈3–4 days) · ✅ done
 
 Goal: an admin session is a separate thing from a customer session. Logging in on the storefront never grants admin access, even for an account that has the admin role.
 
 ### Data model
-- [ ] Replace `isAdmin: boolean` with `role: 'customer' | 'staff' | 'admin' | 'owner'`, and add a migration script for existing users.
-- [ ] Add `status: 'active' | 'disabled'`, `lastLoginAt`, `passwordChangedAt`, and `tokenVersion` (increment it to revoke every session).
-- [ ] Add a new `AdminSession` collection with `userId`, a hashed session id, `ip`, `userAgent`, `createdAt`, `lastSeenAt` and `expiresAt`, plus a TTL index.
-- [ ] Add a new `AuditLog` collection with `actorId`, `action`, `entity`, `entityId`, a `before`/`after` diff, `ip` and `at`.
+- [x] Replace `isAdmin: boolean` with `role: 'customer' | 'staff' | 'admin' | 'owner'`, and add a migration script for existing users.
+- [x] Add `status: 'active' | 'disabled'`, `lastLoginAt`, `passwordChangedAt`, and `tokenVersion` (increment it to revoke every session).
+- [x] Add a new `AdminSession` collection with `userId`, a hashed session id, `ip`, `userAgent`, `createdAt`, `lastSeenAt` and `expiresAt`, plus a TTL index.
+- [x] Add a new `AuditLog` collection with `actorId`, `action`, `entity`, `entityId`, a `before`/`after` diff, `ip` and `at`.
 
 ### Server
-- [ ] Mount a separate router at `/api/admin/*`. All admin endpoints move here, off `/api/products` and `/api/orders`.
-- [ ] Add `POST /api/admin/auth/login` with its own stricter rate limit (for example 5 attempts per 15 min per IP+email) and account lockout after repeated failures.
-- [ ] Use a **server-side session in an httpOnly, `Secure`, `SameSite=Strict` cookie** (`admin_sid`), scoped to `Path=/api/admin`. Give it a short idle timeout (about 30 min) and an absolute cap (about 8 h). Don't use a JWT in localStorage here.
-- [ ] Add `requireAdminSession` middleware. It accepts **only** the admin cookie and rejects Bearer customer tokens outright. Add `requireRole('admin')` for finer checks, for example only `owner` can promote users.
-- [ ] Add CSRF protection on mutating admin routes: a double-submit token, or rely on `SameSite=Strict` plus an `Origin` header check.
-- [ ] Add `POST /api/admin/auth/logout`, `GET /api/admin/auth/me`, and `GET/DELETE /api/admin/sessions` so an admin can list and kill sessions.
-- [ ] Add TOTP 2FA for admin roles (`otplib`) with recovery codes. Make it mandatory for `owner`, optional for the others at first.
-- [ ] Write an audit-log entry for every admin mutation.
+- [x] Mount a separate router at `/api/admin/*`. All admin endpoints move here, off `/api/products` and `/api/orders`.
+- [x] Add `POST /api/admin/auth/login` with its own stricter rate limit (for example 5 attempts per 15 min per IP+email) and account lockout after repeated failures.
+- [x] Use a **server-side session in an httpOnly, `Secure`, `SameSite=Strict` cookie** (`admin_sid`), scoped to `Path=/api/admin`. Give it a short idle timeout (about 30 min) and an absolute cap (about 8 h). Don't use a JWT in localStorage here. *Built with `Path=/` (so `middleware.ts` can see it on `/admin` pages), served first-party through a Next.js rewrite of `/api/admin/*`, and named `__Host-admin_sid` in production.*
+- [x] Add `requireAdminSession` middleware. It accepts **only** the admin cookie and rejects Bearer customer tokens outright. Add `requireRole('admin')` for finer checks, for example only `owner` can promote users.
+- [x] Add CSRF protection on mutating admin routes: a double-submit token, or rely on `SameSite=Strict` plus an `Origin` header check.
+- [x] Add `POST /api/admin/auth/logout`, `GET /api/admin/auth/me`, and `GET/DELETE /api/admin/sessions` so an admin can list and kill sessions.
+- [x] Add TOTP 2FA for admin roles (`otplib`) with recovery codes. *Made mandatory for every admin role, not just owners.*
+- [x] Write an audit-log entry for every admin mutation.
 
 ### Creating admin credentials
-- [ ] Remove the default admin from `seed.ts`.
-- [ ] Add a CLI: `npm run admin:create -- --email you@company.com`. It prompts for a password (never passes it on argv), enforces 12+ characters, and sets `role: 'owner'`.
-- [ ] Onboard further admins by **invite**: the owner enters an email, the system sends a one-time link that expires in 24 h, and the invitee sets a password and enrols 2FA.
-- [ ] Force a password change on first login.
+- [x] Remove the default admin from `seed.ts`.
+- [x] Add a CLI: `npm run admin:create -- --email you@company.com`. It prompts for a password (never passes it on argv), enforces 12+ characters, and sets `role: 'owner'`. *Built as `npm run admin -- create --email …`, with `reset-password`, `reset-2fa`, `unlock`, `list` and `migrate-roles` alongside.*
+- [x] Onboard further admins by **invite**: the owner enters an email, the system sends a one-time link that expires in 24 h, and the invitee sets a password and enrols 2FA. *No email provider yet (Phase 4), so the link is shown once to the inviter. Invites are refused for emails that already have an account.*
+- [x] Force a password change on first login.
 
 ### Client
-- [ ] Add a `/admin/login` page with its own minimal layout (no storefront header or cart).
-- [ ] Add `client/middleware.ts` to redirect `/admin/*` to `/admin/login` when the `admin_sid` cookie is missing. This is a UX gate only; the API is the real one.
-- [ ] Give `app/admin/(console)/layout.tsx` a server component that calls `/api/admin/auth/me` and redirects when that fails, so no admin UI renders for non-admins.
-- [ ] Remove the "Admin" link from the storefront `Header`.
-- [ ] Keep customer auth as-is for now, but plan to move it to httpOnly cookies as well (Phase 5).
+- [x] Add a `/admin/login` page with its own minimal layout (no storefront header or cart).
+- [x] Add `client/middleware.ts` to redirect `/admin/*` to `/admin/login` when the `admin_sid` cookie is missing. This is a UX gate only; the API is the real one.
+- [x] Give `app/admin/(console)/layout.tsx` a server component that calls `/api/admin/auth/me` and redirects when that fails, so no admin UI renders for non-admins.
+- [x] Remove the "Admin" link from the storefront `Header`.
+- [x] Keep customer auth as-is for now, but plan to move it to httpOnly cookies as well (Phase 5).
 
 **Done when:** a customer token gets a 401 on every `/api/admin/*` route, an admin account logged into the storefront still sees the admin login screen at `/admin`, and every admin action shows up in the audit log.
 
