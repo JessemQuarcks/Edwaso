@@ -1,364 +1,338 @@
 'use client';
 
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { AlertCircle, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
-import { api, errorMessage, formatPrice } from '@/lib/api';
-import { adminApi } from '@/lib/admin-api';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
+import { Suspense, useMemo, useState, type FormEvent } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { motion } from 'motion/react';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Textarea } from '@/components/ui/textarea';
+  ArrowRight,
+  Ban,
+  Box,
+  CircleCheckBig,
+  PackageOpen,
+  Receipt,
+  Truck,
+  UserPlus,
+} from 'lucide-react';
+import { useAdminQuery } from '@/lib/use-admin-query';
+import { useUrlState } from '@/lib/use-url-state';
+import { DEFAULT_RANGE, isRangeId, presetFor, RANGE_PRESETS, rangeQuery, type RangeId } from '@/lib/admin-range';
+import { formatDate, formatNumber, formatPrice, orderNumber } from '@/lib/admin-format';
+import { buttonVariants } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
-import type { Order, OrderStatus, OrdersResponse, Product, ProductsResponse } from '@/types';
+import BestSellers from '@/components/admin/BestSellers';
+import FormError from '@/components/admin/FormError';
+import { ChartCard, RevenueChart, RevenueLegend, SeriesTable } from '@/components/admin/charts';
+import { Avatar, DeltaPill, EmptyState, KpiCard, SearchInput, Segmented, Thumb } from '@/components/admin/kit';
+import { CountUp, rowMotion, Stagger, StaggerItem } from '@/components/admin/motion';
+import type { OverviewResponse } from '@/types/admin';
 
-// The form holds strings (raw input values); numbers are parsed on submit.
-interface ProductForm {
-  name: string;
-  description: string;
-  /** Dollars, as typed by the admin. Converted to cents for the API. */
-  price: string;
-  image: string;
-  category: string;
-  stock: string;
+export default function OverviewPage() {
+  return (
+    <Suspense>
+      <Overview />
+    </Suspense>
+  );
 }
 
-const EMPTY: ProductForm = {
-  name: '',
-  description: '',
-  price: '',
-  image: '',
-  category: 'general',
-  stock: '',
-};
+function Overview() {
+  const [url, setUrl] = useUrlState({ range: DEFAULT_RANGE as string });
+  const range: RangeId = isRangeId(url.range) ? url.range : DEFAULT_RANGE;
+  const preset = presetFor(range);
+  // Computed once per range selection, so "now" doesn't change the request on every render.
+  const query = useMemo(() => rangeQuery(range), [range]);
+  const { data, error, loading } = useAdminQuery<OverviewResponse>(`/stats/overview?${query}`);
 
-// 'pending' is system-managed (set at checkout, cleared by the webhook).
-const SETTABLE_STATUSES: OrderStatus[] = ['paid', 'shipped', 'cancelled'];
+  const comparison = preset.previous ? `vs ${preset.previous}` : 'all time';
 
-const customerEmail = (order: Order): string =>
-  typeof order.user === 'string' ? order.user : order.user.email;
+  return (
+    <div className="flex flex-col gap-6">
+      {/* One filter row, scoping everything below it. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Segmented
+            label="Date range"
+            options={RANGE_PRESETS.map((p) => ({ id: p.id, label: p.label, title: p.long }))}
+            value={range}
+            onChange={(id) => setUrl({ range: id })}
+          />
+          <span className="text-sm text-muted-foreground">
+            {preset.long}
+            {preset.previous && <> · compared with the {preset.previous}</>}
+          </span>
+        </div>
+        <Link href={`/admin/analytics?range=${range}`} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+          Full analytics
+          <ArrowRight />
+        </Link>
+      </div>
 
-// Access is enforced by the (console) layout and, for every request, by the admin API.
-export default function AdminPage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [form, setForm] = useState<ProductForm>(EMPTY);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+      <FormError message={error} />
 
-  const load = useCallback(async () => {
-    try {
-      const [p, o] = await Promise.all([
-        api<ProductsResponse>('/products?limit=50'),
-        adminApi<OrdersResponse>('/orders'),
-      ]);
-      setProducts(p.products);
-      setOrders(o.orders);
-    } catch (err) {
-      setError(errorMessage(err));
-    }
-  }, []);
+      {!data ? (
+        <OverviewSkeleton />
+      ) : (
+        <>
+          <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StaggerItem>
+              <KpiCard
+                icon={Box}
+                label="Total products"
+                value={data.kpis.products.value}
+                format={formatNumber}
+                caption={
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                    +{data.kpis.products.added} new
+                  </span>
+                }
+              />
+            </StaggerItem>
+            <StaggerItem>
+              <KpiCard
+                icon={CircleCheckBig}
+                label="Completed orders"
+                value={data.kpis.completedOrders.value}
+                format={formatNumber}
+                kpi={data.kpis.completedOrders}
+              />
+            </StaggerItem>
+            <StaggerItem>
+              <KpiCard
+                icon={Ban}
+                label="Cancelled orders"
+                value={data.kpis.cancelledOrders.value}
+                format={formatNumber}
+                kpi={data.kpis.cancelledOrders}
+                goodWhenUp={false}
+              />
+            </StaggerItem>
+            <StaggerItem>
+              <KpiCard
+                icon={UserPlus}
+                label="New customers"
+                value={data.kpis.newCustomers.value}
+                format={formatNumber}
+                kpi={data.kpis.newCustomers}
+              />
+            </StaggerItem>
+          </Stagger>
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, duration: 0.45 }}>
+            <ChartCard
+              title="Your sales report"
+              description={`Revenue from paid orders, ${preset.long.toLowerCase()}`}
+              loading={loading}
+              chart={
+                <div className="grid gap-6 pb-6 lg:grid-cols-[minmax(220px,280px)_1fr] lg:items-center">
+                  <div className="flex flex-col gap-3">
+                    <CountUp
+                      value={data.kpis.revenue.value}
+                      format={formatPrice}
+                      className="text-4xl font-semibold tracking-tight sm:text-5xl"
+                    />
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                      <DeltaPill change={data.kpis.revenue.change} />
+                      {data.kpis.revenue.previous !== null && (
+                        <span>
+                          {comparison} ({formatPrice(data.kpis.revenue.previous)})
+                        </span>
+                      )}
+                    </div>
+                    <dl className="mt-2 grid grid-cols-2 gap-3 text-sm">
+                      <div className="rounded-lg bg-muted/60 p-3">
+                        <dt className="text-muted-foreground">Orders</dt>
+                        <dd className="mt-0.5 text-lg font-semibold">{formatNumber(data.kpis.completedOrders.value)}</dd>
+                      </div>
+                      <div className="rounded-lg bg-muted/60 p-3">
+                        <dt className="text-muted-foreground">Avg. order</dt>
+                        <dd className="mt-0.5 text-lg font-semibold">{formatPrice(data.kpis.averageOrderValue.value)}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="mb-3 flex flex-wrap gap-4 text-sm">
+                      <RevenueLegend hasPrevious={data.range.previous !== null} />
+                    </div>
+                    <RevenueChart series={data.series} unit={data.range.unit} />
+                  </div>
+                </div>
+              }
+              table={
+                <SeriesTable
+                  series={data.series}
+                  unit={data.range.unit}
+                  columns={[
+                    { label: 'Revenue', value: (p) => formatPrice(p.revenue) },
+                    ...(data.range.previous
+                      ? [{ label: 'Previous period', value: (p: (typeof data.series)[number]) => (p.previousRevenue === null ? '—' : formatPrice(p.previousRevenue)) }]
+                      : []),
+                    { label: 'Orders', value: (p) => formatNumber(p.orders) },
+                  ]}
+                />
+              }
+            />
+          </motion.div>
 
-  const set =
-    (key: keyof ProductForm) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-      setForm((prev) => ({ ...prev, [key]: e.target.value }));
+          <div className="grid gap-6 xl:grid-cols-3">
+            <motion.div
+              className="min-w-0 xl:col-span-2"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25, duration: 0.45 }}
+            >
+              <LatestTransactions orders={data.recentOrders} />
+            </motion.div>
+            <motion.div
+              className="flex min-w-0 flex-col gap-6"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.32, duration: 0.45 }}
+            >
+              <BestSellers products={data.topProducts} periodLabel={preset.long} />
+              <NeedsAttention data={data} />
+            </motion.div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
-  async function save(e: FormEvent<HTMLFormElement>) {
+function LatestTransactions({ orders }: { orders: OverviewResponse['recentOrders'] }) {
+  const router = useRouter();
+  const [q, setQ] = useState('');
+
+  function search(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError('');
-    setSaving(true);
-    const body = {
-      ...form,
-      price: Math.round(parseFloat(form.price) * 100),
-      stock: parseInt(form.stock, 10),
-    };
-    try {
-      if (editingId) await adminApi(`/products/${editingId}`, { method: 'PUT', body });
-      else await adminApi('/products', { method: 'POST', body });
-      setForm(EMPTY);
-      setEditingId(null);
-      await load();
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function edit(p: Product) {
-    setEditingId(p._id);
-    setForm({
-      name: p.name,
-      description: p.description,
-      price: (p.price / 100).toFixed(2),
-      image: p.image,
-      category: p.category,
-      stock: String(p.stock),
-    });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  async function remove(id: string) {
-    if (!confirm('Delete this product?')) return;
-    try {
-      await adminApi(`/products/${id}`, { method: 'DELETE' });
-      await load();
-    } catch (err) {
-      setError(errorMessage(err));
-    }
-  }
-
-  async function setStatus(id: string, status: OrderStatus) {
-    try {
-      await adminApi(`/orders/${id}/status`, { method: 'PATCH', body: { status } });
-      await load();
-    } catch (err) {
-      setError(errorMessage(err));
-    }
+    router.push(q.trim() ? `/admin/orders?q=${encodeURIComponent(q.trim())}` : '/admin/orders');
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Catalog &amp; orders</h1>
-        <p className="text-sm text-muted-foreground">Manage the catalog and fulfil orders.</p>
-      </div>
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{editingId ? 'Edit product' : 'Add product'}</CardTitle>
-          <CardDescription>
-            Prices are entered in dollars and stored as integer cents.
-          </CardDescription>
-        </CardHeader>
-
-        <form onSubmit={save}>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-2 sm:col-span-2">
-              <Label htmlFor="p-name">Name</Label>
-              <Input id="p-name" required value={form.name} onChange={set('name')} />
-            </div>
-
-            <div className="grid gap-2 sm:col-span-2">
-              <Label htmlFor="p-desc">Description</Label>
-              <Textarea id="p-desc" rows={3} value={form.description} onChange={set('description')} />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="p-price">Price (USD)</Label>
-              <Input
-                id="p-price"
-                required
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="49.99"
-                value={form.price}
-                onChange={set('price')}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="p-stock">Stock</Label>
-              <Input
-                id="p-stock"
-                required
-                type="number"
-                min="0"
-                step="1"
-                placeholder="25"
-                value={form.stock}
-                onChange={set('stock')}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="p-category">Category</Label>
-              <Input id="p-category" value={form.category} onChange={set('category')} />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="p-image">Image URL</Label>
-              <Input
-                id="p-image"
-                type="url"
-                placeholder="https://…"
-                value={form.image}
-                onChange={set('image')}
-              />
-            </div>
-          </CardContent>
-
-          <CardFooter className="mt-6 gap-2">
-            <Button type="submit" disabled={saving}>
-              {saving ? <Loader2 className="animate-spin" /> : editingId ? <Pencil /> : <Plus />}
-              {editingId ? 'Update product' : 'Create product'}
-            </Button>
-            {editingId && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setEditingId(null);
-                  setForm(EMPTY);
-                }}
-              >
-                <X />
-                Cancel
-              </Button>
-            )}
-          </CardFooter>
+    <Card className="gap-0 py-0">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 border-b py-4">
+        <div>
+          <CardTitle>Latest transactions</CardTitle>
+          <CardDescription>The most recent orders across every status</CardDescription>
+        </div>
+        <form onSubmit={search} className="flex items-center gap-2">
+          <SearchInput value={q} onChange={setQ} placeholder="Search orders" className="w-48" />
+          <Link href="/admin/orders" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            View all
+          </Link>
         </form>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Products</CardTitle>
-          <CardDescription>{products.length} in the catalog.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead className="text-right">Price</TableHead>
-                  <TableHead className="text-right">Stock</TableHead>
-                  <TableHead className="w-24" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {products.map((p) => (
-                  <TableRow key={p._id}>
-                    <TableCell className="font-medium">{p.name}</TableCell>
-                    <TableCell className="capitalize text-muted-foreground">{p.category}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatPrice(p.price)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{p.stock}</TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => edit(p)}
-                          aria-label={`Edit ${p.name}`}
-                        >
-                          <Pencil />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="text-destructive"
-                          onClick={() => void remove(p._id)}
-                          aria-label={`Delete ${p.name}`}
-                        >
-                          <Trash2 />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Orders</CardTitle>
-          <CardDescription>Most recent first.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-40">Change status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orders.map((o) => (
-                  <TableRow key={o._id}>
-                    <TableCell className="whitespace-nowrap">
-                      {new Date(o.createdAt).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{customerEmail(o)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatPrice(o.total)}
+      </CardHeader>
+      {orders.length === 0 ? (
+        <EmptyState icon={Receipt} title="No orders yet" description="New orders will show up here as they come in." />
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="pl-6">Order</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+                <TableHead className="pr-6">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {orders.map((o, i) => {
+                const user = typeof o.user === 'string' ? null : o.user;
+                return (
+                  <motion.tr
+                    key={o._id}
+                    {...rowMotion(i)}
+                    onClick={() => router.push(`/admin/orders/${o._id}`)}
+                    className="cursor-pointer border-b transition-colors hover:bg-muted/50"
+                  >
+                    <TableCell className="pl-6 font-medium">
+                      <Link href={`/admin/orders/${o._id}`} onClick={(e) => e.stopPropagation()} className="hover:underline">
+                        {orderNumber(o._id)}
+                      </Link>
                     </TableCell>
                     <TableCell>
+                      <span className="flex items-center gap-2">
+                        <Avatar name={user?.name ?? '?'} className="size-7" />
+                        <span className="max-w-40 truncate">{user?.name ?? 'Deleted customer'}</span>
+                      </span>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(o.createdAt)}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">{formatPrice(o.total)}</TableCell>
+                    <TableCell className="pr-6">
                       <OrderStatusBadge status={o.status} />
                     </TableCell>
-                    <TableCell>
-                      <Select
-                        value={o.status}
-                        onValueChange={(v) => void setStatus(o._id, v as OrderStatus)}
-                      >
-                        <SelectTrigger size="sm" className="w-36 capitalize">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {o.status === 'pending' && (
-                            <SelectItem value="pending" disabled>
-                              pending
-                            </SelectItem>
-                          )}
-                          {SETTABLE_STATUSES.map((s) => (
-                            <SelectItem key={s} value={s} className="capitalize">
-                              {s}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                  </motion.tr>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function NeedsAttention({ data }: { data: OverviewResponse }) {
+  const nothing = data.awaitingShipment === 0 && data.lowStock.length === 0;
+  return (
+    <Card className="gap-3">
+      <CardHeader>
+        <CardTitle>Needs attention</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">
+        {nothing && <p className="text-sm text-muted-foreground">Nothing waiting on you. Nice.</p>}
+        {data.awaitingShipment > 0 && (
+          <Link
+            href="/admin/orders?status=paid"
+            className="flex items-center gap-3 rounded-lg p-2 -mx-2 transition-colors hover:bg-muted"
+          >
+            <span className="flex size-9 items-center justify-center rounded-lg bg-muted">
+              <Truck className="size-4" />
+            </span>
+            <span className="flex-1 text-sm">
+              <span className="font-medium">{data.awaitingShipment}</span> paid{' '}
+              {data.awaitingShipment === 1 ? 'order' : 'orders'} to ship
+            </span>
+            <ArrowRight className="size-4 text-muted-foreground" />
+          </Link>
+        )}
+        {data.lowStock.map((p) => (
+          <Link
+            key={p._id}
+            href={`/admin/products/${p._id}`}
+            className="flex items-center gap-3 rounded-lg p-2 -mx-2 transition-colors hover:bg-muted"
+          >
+            <Thumb src={p.image} alt={p.name} className="size-9" />
+            <span className="min-w-0 flex-1 text-sm">
+              <span className="block truncate font-medium">{p.name}</span>
+              <span className="text-xs text-muted-foreground">
+                {p.stock === 0 ? 'Out of stock' : `${p.stock} left`}
+              </span>
+            </span>
+            <PackageOpen className="size-4 text-muted-foreground" />
+          </Link>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function OverviewSkeleton() {
+  return (
+    <div className="flex flex-col gap-6" aria-busy="true" aria-label="Loading overview">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <Skeleton key={i} className="h-[76px] rounded-xl" />
+        ))}
+      </div>
+      <Skeleton className="h-[380px] rounded-xl" />
+      <div className="grid gap-6 xl:grid-cols-3">
+        <Skeleton className="h-80 rounded-xl xl:col-span-2" />
+        <Skeleton className="h-80 rounded-xl" />
+      </div>
     </div>
   );
 }

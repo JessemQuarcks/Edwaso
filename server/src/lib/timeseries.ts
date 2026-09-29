@@ -34,6 +34,7 @@ export const rangeQuerySchema = z
   .object({
     from: z.coerce.date({ error: 'from must be a date' }).optional(),
     to: z.coerce.date({ error: 'to must be a date' }).optional(),
+    /** Start of the comparison period, for calendar-aligned periods (e.g. the same months last year). */
     compareFrom: z.coerce.date().optional(),
     unit: z.enum(UNITS).default('day'),
     tz: z.string().max(64).refine(isTimeZone, 'Unknown timezone').default('UTC'),
@@ -61,9 +62,11 @@ export function resolveRange(q: RangeQuery, earliest: Date | null): Range {
   if (to.getTime() - from.getTime() > MAX_SPAN_MS[q.unit]) {
     throw new RangeError(`Range too long for ${q.unit} buckets`);
   }
-  const previous = q.from
-    ? { from: q.compareFrom ?? new Date(from.getTime() - (to.getTime() - from.getTime())), to: from }
-    : undefined;
+  // The previous period covers the same length of time, so a half-finished "today" is compared
+  // with the same slice of the matching day, not a whole one.
+  const span = to.getTime() - from.getTime();
+  const prevFrom = q.compareFrom ?? new Date(from.getTime() - span);
+  const previous = q.from ? { from: prevFrom, to: new Date(prevFrom.getTime() + span) } : undefined;
   return { from, to, unit: q.unit, tz: q.tz, previous };
 }
 
