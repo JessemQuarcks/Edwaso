@@ -12,6 +12,14 @@ export interface IOrderItem {
   quantity: number;
 }
 
+export interface IStatusChange {
+  status: OrderStatus;
+  at: Date;
+  /** The admin who made the change; absent for system changes (checkout, Stripe webhook). */
+  by?: Types.ObjectId;
+  note?: string;
+}
+
 export interface IShippingAddress {
   name?: string;
   line1?: string;
@@ -30,6 +38,7 @@ export interface IOrder {
   stripeSessionId?: string;
   paidAt?: Date;
   shippingAddress?: IShippingAddress;
+  statusHistory: IStatusChange[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -43,6 +52,16 @@ const orderItemSchema = new Schema<IOrderItem>(
     image: String,
     price: { type: Number, required: true },
     quantity: { type: Number, required: true, min: 1 },
+  },
+  { _id: false }
+);
+
+const statusChangeSchema = new Schema<IStatusChange>(
+  {
+    status: { type: String, enum: ORDER_STATUSES, required: true },
+    at: { type: Date, required: true },
+    by: { type: Schema.Types.ObjectId, ref: 'User' },
+    note: String,
   },
   { _id: false }
 );
@@ -64,8 +83,12 @@ const orderSchema = new Schema<IOrder>(
       postalCode: String,
       country: String,
     },
+    statusHistory: { type: [statusChangeSchema], default: [] },
   },
   { timestamps: true }
 );
+
+orderSchema.index({ createdAt: -1 });
+orderSchema.index({ status: 1, paidAt: -1 });
 
 export default mongoose.model<IOrder>('Order', orderSchema);
