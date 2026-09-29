@@ -78,12 +78,9 @@ export default function SecurityPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Account & security</h1>
-        <p className="text-sm text-muted-foreground">
-          Signed in as {admin.email} · <span className="capitalize">{admin.role}</span>
-        </p>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        Signed in as {admin.email} · <span className="capitalize">{admin.role}</span>
+      </p>
 
       <FormError message={error} />
 

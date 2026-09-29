@@ -73,6 +73,36 @@ admin access, even for an account with an admin role.
   `(console)` layout validates the session with the API before rendering, and the API checks every
   request.
 
+### Console pages
+
+| Page | What it does |
+| --- | --- |
+| Overview (`/admin`) | Date range (24h / 7d / 30d / 12m / all), KPI tiles with change vs the previous period, sales report (revenue this vs previous period), latest transactions, best-sellers carousel, items needing attention |
+| Orders | Status tabs with counts, search by customer/email/order #, sorting, CSV export, detail page with timeline, *Mark as shipped* and *Cancel* (with optional restock) |
+| Products | Search, category and stock filters, units sold, stock meter; create/edit with a live preview |
+| Customers | Lifetime value, order count, last order; detail page with order history; owners/admins can disable accounts |
+| Analytics | Revenue, orders, average order value, revenue by category, orders by status, top products and customers |
+| Team | Members (owners/admins change roles and access) and invites |
+| Account & security | Password, 2FA status, signed-in sessions |
+
+Every chart has a table view (the grid icon on its card). Filters live in the URL, so a filtered
+view can be bookmarked or shared. Reports bucket by the admin's own timezone.
+
+The sidebar badge and the bell poll `/api/admin/notifications` every minute: paid orders waiting to
+ship and products at or below 5 in stock.
+
+### Demo data
+
+To see the dashboard with realistic history, from `server/`:
+
+```bash
+npm run seed                 # sample products, if you have none
+npm run demo -- seed         # ~100 customers and ~2,000 orders over 14 months
+npm run demo -- clear        # removes exactly what demo seed added
+```
+
+Demo customers use the `@demo.shop.test` domain; `clear` deletes only them and their orders.
+
 ### Admin CLI (`server/`)
 
 | Command | |
@@ -166,7 +196,11 @@ not Radix). There is no hand-written CSS beyond the theme tokens.
 | GET/POST | `/api/admin/auth/me`, `/password`, `/2fa/setup`, `/2fa/enable` | admin session (setup may be pending) |
 | GET/DELETE | `/api/admin/sessions[/:id]` | admin session |
 | POST/PUT/DELETE | `/api/admin/products[/:id]` | admin session, setup complete |
-| GET, PATCH | `/api/admin/orders[/:id]`, `/api/admin/orders/:id/status` | admin session, setup complete |
+| GET, PATCH | `/api/admin/orders[/:id]`, `/api/admin/orders/:id/status` (enforced transitions; only Stripe marks orders paid) | admin session, setup complete |
+| GET | `/api/admin/stats/overview`, `/api/admin/stats/analytics` (`from`, `to`, `unit`, `tz`) | admin session, setup complete |
+| GET | `/api/admin/orders/export` (CSV), `/api/admin/products[/:id]`, `/api/admin/customers[/:id]`, `/api/admin/notifications` | admin session, setup complete |
+| PATCH | `/api/admin/customers/:id/status` | owner, admin |
+| GET, PATCH | `/api/admin/team[/:id]` | owner, admin |
 | GET/POST/DELETE | `/api/admin/invites[/:id]` | owner, admin |
 | GET | `/api/admin/audit` | owner, admin |
 

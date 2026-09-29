@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAdmin } from '@/components/admin/AdminShell';
 import FormError from '@/components/admin/FormError';
+import TeamMembers from '@/components/admin/TeamMembers';
 import type { Invite } from '@/types/admin';
 
 type InviteRole = Invite['role'];
@@ -98,14 +99,8 @@ export default function TeamPage() {
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Team</h1>
-        <p className="text-sm text-muted-foreground">
-          Staff sign in at <code className="text-xs">/admin/login</code> with their own account, separate from any
-          shopping account.
-        </p>
-      </div>
+    <div className="flex flex-col gap-6">
+      <TeamMembers />
 
       <Card>
         <CardHeader>

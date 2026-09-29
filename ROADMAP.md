@@ -64,38 +64,41 @@ Goal: an admin session is a separate thing from a customer session. Logging in o
 
 ---
 
-## Phase 2: Admin console (≈2–3 weeks)
+## Phase 2: Admin console (≈2–3 weeks) · 🟡 in progress
+
+*Status (Sep 2026): the console shell, dashboard, orders, products, customers, analytics and team pages are built
+(design inspired by the "Admin E-Commerce Dashboard" concept). Unchecked items below remain.*
 
 A dedicated shell: sidebar navigation (shadcn `sidebar`; the tokens already exist), top bar with a global search, and breadcrumbs. Every list is server-paginated, sortable, filterable and exportable to CSV.
 
 ### 2a. Dashboard (`/admin`)
-- [ ] KPI tiles: revenue today, this week and this month; order count; average order value; new customers; refunds.
-- [ ] A revenue-over-time chart (recharts via shadcn `chart`) and the top 5 products by revenue.
-- [ ] Action queues: orders awaiting shipment, low-stock products, failed payments.
-- [ ] Backed by `GET /api/admin/stats?from&to`, using Mongo aggregation pipelines.
+- [x] KPI tiles with change vs the previous period, over a selectable range (24h / 7d / 30d / 12m / all). *Refunds wait for 2e.*
+- [x] A revenue-over-time chart (recharts), this period vs previous, and a best-sellers carousel.
+- [x] Action queues: orders awaiting shipment and low-stock products, plus a notifications bell. *Failed payments wait for 2e.*
+- [x] Backed by `GET /api/admin/stats/overview` and `/stats/analytics`, using Mongo aggregation pipelines bucketed in the admin's timezone.
 
 ### 2b. Products (`/admin/products`)
-- [ ] A table with search, category and stock filters, sorting, and bulk actions (archive, change category, adjust price by %).
-- [ ] A dedicated create/edit page instead of the inline form: rich description, **image upload** (Cloudinary or S3 presigned URLs) with multiple images and reordering, SKU, compare-at price, cost price (needed for margin reporting), `featured` flag (feeds the landing page), and `status: draft | active | archived`.
+- [x] A table with search, category and stock filters, sorting and units sold. *Bulk actions still to do.*
+- [ ] A dedicated create/edit page instead of the inline form (*done, with a live preview; the rest of this item is not*): rich description, **image upload** (Cloudinary or S3 presigned URLs) with multiple images and reordering, SKU, compare-at price, cost price (needed for margin reporting), `featured` flag (feeds the landing page), and `status: draft | active | archived`.
 - [ ] Replace hard delete with archive. Orders reference products, so archived products stay resolvable.
 - [ ] Categories management (`/admin/categories`): name, slug, image and sort order. This turns the free-text `category` string into a `Category` model.
 - [ ] Inventory: stock-adjustment history (a reason plus who made it), a configurable low-stock threshold, and CSV import/export.
 
 ### 2c. Orders (`/admin/orders`)
-- [ ] Filters for status, date range, customer and amount, plus search by order id or email.
-- [ ] An order detail page (`/admin/orders/[id]`): line items, customer, shipping address, payment info (a Stripe link), and a **status timeline**.
+- [x] Status tabs with counts, sorting, search by order # / customer / email, CSV export. *Date-range and amount filters still to do.*
+- [x] An order detail page (`/admin/orders/[id]`): line items, customer, shipping address, payment info, and a **status timeline** (`statusHistory` on the order).
 - [ ] Expand the status model to `pending → paid → processing → shipped → delivered`, plus `cancelled` and `refunded` / `partially_refunded`.
-- [ ] Enforce status transitions on the server with a state machine, so `pending → paid` is only possible from the webhook.
+- [x] Enforce status transitions on the server with a state machine, so `pending → paid` is only possible from the webhook.
 - [ ] Fulfilment: carrier, tracking number and tracking URL, a printable packing slip and invoice, and email the customer on ship.
-- [ ] Cancel with a restock option. Cancelling a paid order requires a refund.
+- [x] Cancel with a restock option. *The refund itself is still done in Stripe until 2e.*
 - [ ] Internal notes on orders.
 
 ### 2d. Customers & staff (`/admin/users`)
-- [ ] A customer list with search, joined date, order count and lifetime value.
-- [ ] A customer detail page: profile, order history, total spent, and an activity/audit trail.
-- [ ] Actions: disable/enable the account (bumps `tokenVersion` to kill sessions), trigger a password-reset email, and add notes.
-- [ ] A staff tab (owner only): invite an admin or staff member, change role, revoke access, and view active sessions.
-- [ ] Guards: an admin can never demote or disable themselves or the last `owner`.
+- [x] A customer list with search, joined date, order count and lifetime value.
+- [x] A customer detail page: profile, order history and totals. *Activity trail still to do.*
+- [ ] Actions: disable/enable the account (*done, bumps `tokenVersion`*), trigger a password-reset email, and add notes.
+- [x] A team tab: invite, change role (owner), disable/restore access. *Viewing another member's sessions still to do.*
+- [x] Guards: nobody can change their own account from the team page, and owners are only changed from the CLI.
 
 ### 2e. Finances (`/admin/finance`)
 - [ ] **Store the Stripe `payment_intent` id and charge id** on the order in the webhook. This is a prerequisite for everything else here.
