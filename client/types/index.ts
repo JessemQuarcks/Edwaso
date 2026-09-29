@@ -17,7 +17,6 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  isAdmin: boolean;
 }
 
 /** `user` as returned by `.populate('user', 'name email')` on the admin orders list. */
