@@ -5,6 +5,7 @@ import { ShoppingCart } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import ThemeToggle from './ThemeToggle';
 import { useAuth, useCart } from './Providers';
 
 export default function Header() {
@@ -19,6 +20,7 @@ export default function Header() {
         </Link>
 
         <nav className="flex items-center gap-1 sm:gap-2">
+          <ThemeToggle />
           <Link
             href="/cart"
             className={buttonVariants({ variant: 'ghost', size: 'sm', className: 'relative' })}
@@ -43,14 +45,6 @@ export default function Header() {
                   <Link href="/orders" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
                     Orders
                   </Link>
-                  {user.isAdmin && (
-                    <Link
-                      href="/admin"
-                      className={buttonVariants({ variant: 'ghost', size: 'sm' })}
-                    >
-                      Admin
-                    </Link>
-                  )}
                   <Button variant="outline" size="sm" onClick={logout}>
                     <span className="max-w-24 truncate">{user.name}</span>
                     <span className="text-muted-foreground">· Log out</span>
