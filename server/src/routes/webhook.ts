@@ -39,7 +39,7 @@ export const stripeWebhook: RequestHandler = async (req, res) => {
     } else if (event.type === 'checkout.session.expired') {
       await Order.updateOne(
         { _id: event.data.object.metadata?.orderId, status: 'pending' },
-        { status: 'cancelled' }
+        { status: 'cancelled', $push: { statusHistory: { status: 'cancelled', at: new Date(), note: 'Checkout expired' } } }
       );
     }
     res.json({ received: true });
@@ -70,7 +70,12 @@ async function handlePaid(session: Stripe.Checkout.Session): Promise<void> {
   const s = session as Stripe.Checkout.Session & SessionWithShipping;
   const ship = s.shipping_details ?? s.collected_information?.shipping_details;
 
-  const update: Record<string, unknown> = { status: 'paid', paidAt: new Date() };
+  const now = new Date();
+  const update: Record<string, unknown> = {
+    status: 'paid',
+    paidAt: now,
+    $push: { statusHistory: { status: 'paid', at: now, note: 'Payment received' } },
+  };
   const shippingAddress = ship ? toShippingAddress(ship) : undefined;
   if (shippingAddress) update.shippingAddress = shippingAddress;
 

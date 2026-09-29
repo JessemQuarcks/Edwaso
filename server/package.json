@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit && tsc -p test",
     "admin": "tsx --env-file=.env src/scripts/admin.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "demo": "tsx --env-file=.env src/scripts/demo-data.ts"
   },
   "engines": {
     "node": ">=20.6"
