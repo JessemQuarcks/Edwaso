@@ -78,6 +78,7 @@ admin access, even for an account with an admin role.
 | Command | |
 | --- | --- |
 | `npm run admin -- create --email <e> [--name <n>] [--role owner|admin|staff]` | Create a staff account. Leave the password blank to get a temporary one that must be changed. |
+| `npm run admin -- set-role --email <e> --role <owner|admin|staff|customer>` | Change an existing account's role, e.g. give your shopping account staff access for testing. Gaining staff access forces a new 12+ char password and 2FA at first admin sign-in. |
 | `npm run admin -- reset-password --email <e>` | Temporary password, forced change, signs out everywhere |
 | `npm run admin -- reset-2fa --email <e>` | Clear 2FA so it can be enrolled again |
 | `npm run admin -- unlock --email <e>` | Clear a failed-login lockout |

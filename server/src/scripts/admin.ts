@@ -1,6 +1,7 @@
 // Admin account CLI. Run from server/: `npm run admin -- <command> [options]`.
 //
 //   create --email <email> [--name <name>] [--role owner|admin|staff]
+//   set-role --email <email> --role <role>   change an existing account's role (incl. customer)
 //   reset-password --email <email>     issue a temporary password, sign out everywhere
 //   reset-2fa --email <email>          clear two-factor so it can be enrolled again
 //   unlock --email <email>             clear a failed-login lockout
@@ -16,7 +17,7 @@ import mongoose from 'mongoose';
 import { connectDB } from '../config/db.js';
 import AdminSession from '../models/AdminSession.js';
 import AuditLog from '../models/AuditLog.js';
-import User, { ADMIN_MIN_PASSWORD, ADMIN_ROLES, type Role, type UserDoc } from '../models/User.js';
+import User, { ADMIN_MIN_PASSWORD, ADMIN_ROLES, ROLES, type Role, type UserDoc } from '../models/User.js';
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -105,7 +106,9 @@ async function create(): Promise<void> {
   const role = values.role as Role;
   if (!ADMIN_ROLES.includes(role)) fail(`--role must be one of ${ADMIN_ROLES.join(', ')}`);
   if (await User.exists({ email })) {
-    fail(`An account already uses ${email}. Staff accounts need their own email, separate from any shopping account.`);
+    fail(
+      `An account already uses ${email}. To give that account staff access, run: npm run admin -- set-role --email ${email} --role ${role}`
+    );
   }
   const name = values.name?.trim() || (await prompt('Name: ')).trim() || 'Admin';
   const { password, temporary } = await choosePassword();
@@ -116,6 +119,38 @@ async function create(): Promise<void> {
   console.log(`\nCreated ${role} account for ${email}.`);
   if (temporary) console.log(`Temporary password (shown once, must be changed at first sign-in): ${password}`);
   console.log('Sign in at /admin/login. You will be asked to set up two-factor authentication.');
+}
+
+// Unlike invites, this may give an existing shopping account staff access: whoever runs the CLI
+// already controls the server. The same account then signs in to the shop and, separately, to /admin.
+async function setRole(): Promise<void> {
+  const email = values.email?.trim().toLowerCase();
+  if (!email) fail('--email is required');
+  const role = values.role as Role;
+  if (!ROLES.includes(role)) fail(`--role must be one of ${ROLES.join(', ')}`);
+  const user = await User.findOne({ email });
+  if (!user) fail(`No account with email ${email}`);
+
+  const before = user.role;
+  if (before === role) return console.log(`${email} is already ${role}.`);
+  const gainsStaffAccess = !ADMIN_ROLES.includes(before) && ADMIN_ROLES.includes(role);
+  user.role = role;
+  // Customer passwords only need 8 characters; admin ones need 12.
+  if (gainsStaffAccess) user.mustChangePassword = true;
+  await user.save();
+  await AuditLog.create({
+    action: 'cli.role_change',
+    entity: 'User',
+    entityId: user.id,
+    before: { role: before },
+    after: { role },
+    meta: { email, via: 'cli' },
+  });
+
+  console.log(`${email}: ${before} -> ${role}.`);
+  if (gainsStaffAccess) {
+    console.log('At first sign-in at /admin/login they must set a new password (12+ chars) and set up 2FA.');
+  }
 }
 
 async function resetPassword(): Promise<void> {
@@ -193,6 +228,7 @@ async function migrateRoles(): Promise<void> {
 
 const COMMANDS: Record<string, () => Promise<void>> = {
   create,
+  'set-role': setRole,
   'reset-password': resetPassword,
   'reset-2fa': reset2fa,
   unlock,
