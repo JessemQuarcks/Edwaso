@@ -1,0 +1,169 @@
+# Roadmap
+
+Where the app is today, and what it takes to get to a polished storefront plus a real admin back office.
+
+## Where things stand
+
+| Area | Today | Gap |
+| --- | --- | --- |
+| Landing (`client/app/page.tsx`) | Heading, search bar and a product grid | No hero, no featured or category sections, no motion. The catalogue *is* the landing page. |
+| Auth | One login for everyone. The JWT sits in `localStorage` for 7 days, and admin is a boolean `isAdmin` on `User`. | An admin is just a customer with a flag. The admin session is the shopping session, it can't be revoked, and any XSS can read the token. |
+| Admin gating | `/admin` is a client component that hides itself when `!user.isAdmin`. The API checks `adminOnly`. | The page shell still ships to every visitor, and nothing is enforced at the route level. The seed also creates `admin@example.com / admin12345`. |
+| Admin UI (`client/app/admin/page.tsx`) | A single page with a product form, a product table and an orders table capped at 200 | No layout or navigation, no user management, no finances, no pagination, search, order detail, refunds or audit trail. |
+| Orders | `pending → paid → shipped / cancelled` | Cancelling a paid order doesn't refund or restock. An admin can mark a pending order as `paid` by hand. The Stripe payment intent isn't stored, so refunds are impossible. |
+| Quality | Typecheck only | No git repo, no tests and no request validation library |
+
+---
+
+## Phase 0: Foundations (≈1–2 days)
+
+Do this before touching features so every later phase is safer.
+
+- [ ] `git init` and make a first commit. `.gitignore` already excludes `.env`.
+- [ ] Add **zod** to the server for request validation. Replace the hand-rolled `typeof` checks in `auth.ts`, `products.ts` and `checkout.ts`.
+- [ ] Add a test harness: **vitest + supertest + mongodb-memory-server** on the server, then smoke-test the auth, checkout and webhook flows.
+- [ ] Share types. Move the API response types into a `shared/` package, or generate them from the zod schemas, so `client/types/index.ts` stops drifting.
+- [ ] Wire up the dark-mode toggle. The tokens already exist in `globals.css`, and the admin panel will benefit.
+
+---
+
+## Phase 1: Admin authentication done right (≈3–4 days) · **highest priority**
+
+Goal: an admin session is a separate thing from a customer session. Logging in on the storefront never grants admin access, even for an account that has the admin role.
+
+### Data model
+- [ ] Replace `isAdmin: boolean` with `role: 'customer' | 'staff' | 'admin' | 'owner'`, and add a migration script for existing users.
+- [ ] Add `status: 'active' | 'disabled'`, `lastLoginAt`, `passwordChangedAt`, and `tokenVersion` (increment it to revoke every session).
+- [ ] Add a new `AdminSession` collection with `userId`, a hashed session id, `ip`, `userAgent`, `createdAt`, `lastSeenAt` and `expiresAt`, plus a TTL index.
+- [ ] Add a new `AuditLog` collection with `actorId`, `action`, `entity`, `entityId`, a `before`/`after` diff, `ip` and `at`.
+
+### Server
+- [ ] Mount a separate router at `/api/admin/*`. All admin endpoints move here, off `/api/products` and `/api/orders`.
+- [ ] Add `POST /api/admin/auth/login` with its own stricter rate limit (for example 5 attempts per 15 min per IP+email) and account lockout after repeated failures.
+- [ ] Use a **server-side session in an httpOnly, `Secure`, `SameSite=Strict` cookie** (`admin_sid`), scoped to `Path=/api/admin`. Give it a short idle timeout (about 30 min) and an absolute cap (about 8 h). Don't use a JWT in localStorage here.
+- [ ] Add `requireAdminSession` middleware. It accepts **only** the admin cookie and rejects Bearer customer tokens outright. Add `requireRole('admin')` for finer checks, for example only `owner` can promote users.
+- [ ] Add CSRF protection on mutating admin routes: a double-submit token, or rely on `SameSite=Strict` plus an `Origin` header check.
+- [ ] Add `POST /api/admin/auth/logout`, `GET /api/admin/auth/me`, and `GET/DELETE /api/admin/sessions` so an admin can list and kill sessions.
+- [ ] Add TOTP 2FA for admin roles (`otplib`) with recovery codes. Make it mandatory for `owner`, optional for the others at first.
+- [ ] Write an audit-log entry for every admin mutation.
+
+### Creating admin credentials
+- [ ] Remove the default admin from `seed.ts`.
+- [ ] Add a CLI: `npm run admin:create -- --email you@company.com`. It prompts for a password (never passes it on argv), enforces 12+ characters, and sets `role: 'owner'`.
+- [ ] Onboard further admins by **invite**: the owner enters an email, the system sends a one-time link that expires in 24 h, and the invitee sets a password and enrols 2FA.
+- [ ] Force a password change on first login.
+
+### Client
+- [ ] Add a `/admin/login` page with its own minimal layout (no storefront header or cart).
+- [ ] Add `client/middleware.ts` to redirect `/admin/*` to `/admin/login` when the `admin_sid` cookie is missing. This is a UX gate only; the API is the real one.
+- [ ] Give `app/admin/(console)/layout.tsx` a server component that calls `/api/admin/auth/me` and redirects when that fails, so no admin UI renders for non-admins.
+- [ ] Remove the "Admin" link from the storefront `Header`.
+- [ ] Keep customer auth as-is for now, but plan to move it to httpOnly cookies as well (Phase 5).
+
+**Done when:** a customer token gets a 401 on every `/api/admin/*` route, an admin account logged into the storefront still sees the admin login screen at `/admin`, and every admin action shows up in the audit log.
+
+---
+
+## Phase 2: Admin console (≈2–3 weeks)
+
+A dedicated shell: sidebar navigation (shadcn `sidebar`; the tokens already exist), top bar with a global search, and breadcrumbs. Every list is server-paginated, sortable, filterable and exportable to CSV.
+
+### 2a. Dashboard (`/admin`)
+- [ ] KPI tiles: revenue today, this week and this month; order count; average order value; new customers; refunds.
+- [ ] A revenue-over-time chart (recharts via shadcn `chart`) and the top 5 products by revenue.
+- [ ] Action queues: orders awaiting shipment, low-stock products, failed payments.
+- [ ] Backed by `GET /api/admin/stats?from&to`, using Mongo aggregation pipelines.
+
+### 2b. Products (`/admin/products`)
+- [ ] A table with search, category and stock filters, sorting, and bulk actions (archive, change category, adjust price by %).
+- [ ] A dedicated create/edit page instead of the inline form: rich description, **image upload** (Cloudinary or S3 presigned URLs) with multiple images and reordering, SKU, compare-at price, cost price (needed for margin reporting), `featured` flag (feeds the landing page), and `status: draft | active | archived`.
+- [ ] Replace hard delete with archive. Orders reference products, so archived products stay resolvable.
+- [ ] Categories management (`/admin/categories`): name, slug, image and sort order. This turns the free-text `category` string into a `Category` model.
+- [ ] Inventory: stock-adjustment history (a reason plus who made it), a configurable low-stock threshold, and CSV import/export.
+
+### 2c. Orders (`/admin/orders`)
+- [ ] Filters for status, date range, customer and amount, plus search by order id or email.
+- [ ] An order detail page (`/admin/orders/[id]`): line items, customer, shipping address, payment info (a Stripe link), and a **status timeline**.
+- [ ] Expand the status model to `pending → paid → processing → shipped → delivered`, plus `cancelled` and `refunded` / `partially_refunded`.
+- [ ] Enforce status transitions on the server with a state machine, so `pending → paid` is only possible from the webhook.
+- [ ] Fulfilment: carrier, tracking number and tracking URL, a printable packing slip and invoice, and email the customer on ship.
+- [ ] Cancel with a restock option. Cancelling a paid order requires a refund.
+- [ ] Internal notes on orders.
+
+### 2d. Customers & staff (`/admin/users`)
+- [ ] A customer list with search, joined date, order count and lifetime value.
+- [ ] A customer detail page: profile, order history, total spent, and an activity/audit trail.
+- [ ] Actions: disable/enable the account (bumps `tokenVersion` to kill sessions), trigger a password-reset email, and add notes.
+- [ ] A staff tab (owner only): invite an admin or staff member, change role, revoke access, and view active sessions.
+- [ ] Guards: an admin can never demote or disable themselves or the last `owner`.
+
+### 2e. Finances (`/admin/finance`)
+- [ ] **Store the Stripe `payment_intent` id and charge id** on the order in the webhook. This is a prerequisite for everything else here.
+- [ ] Record `amountSubtotal`, `amountTax`, `amountShipping`, `amountTotal`, and the Stripe fee (from the balance transaction), so the admin sees net revenue.
+- [ ] Refunds: full or partial from the order page via `stripe.refunds.create`, with a reason. Handle the `charge.refunded` webhook to keep the order in sync, and optionally restock.
+- [ ] A transactions ledger: every payment and refund with gross, fee and net, filterable by date and exportable to CSV for accounting.
+- [ ] Reports: revenue by day, week or month; by category and by product; gross margin (using cost price); refund rate.
+- [ ] Payouts: list Stripe payouts (`stripe.payouts.list`) and reconcile them against the ledger.
+- [ ] Settings (`/admin/settings`): store name, currency, allowed shipping countries (currently hard-coded in `checkout.ts`), tax behaviour, and low-stock threshold.
+
+### 2f. Audit log (`/admin/audit`)
+- [ ] A read-only, filterable list of every admin action (who, what, when, before and after).
+
+---
+
+## Phase 3: Storefront & landing page redesign (≈1–1.5 weeks)
+
+Can run in parallel with Phase 2 once Phase 1's model changes (`featured`, `Category`) land.
+
+### Structure
+- [ ] Move the catalogue from `/` to `/shop`, keeping the search, filters and pagination that exist today, and add price and sort filters.
+- [ ] Rebuild `/` as a landing page with these sections:
+  1. **Hero**: a full-bleed image or gradient, a headline, a subcopy line and two CTAs (Shop now, Browse categories). Use a staggered fade-and-rise entrance with a subtle parallax or ken-burns effect on the image.
+  2. **Trust bar**: free shipping, secure checkout, easy returns.
+  3. **Shop by category**: image tiles from the `Category` model, with a hover zoom and overlay.
+  4. **Featured products**: products flagged `featured`, as a carousel (embla via shadcn `carousel`) or grid.
+  5. **Promo or editorial split section**: image plus copy, revealed on scroll.
+  6. **New arrivals**: the latest 8 products.
+  7. **Testimonials or social proof.**
+  8. **Newsletter signup and a proper footer**: links, socials, legal.
+- [ ] Improve the header: logo, category menu, search, cart drawer (a slide-over instead of navigating to `/cart`), and a user menu.
+
+### Motion
+- [ ] Add **`motion`** (Framer Motion) for scroll-reveal (`whileInView`), staggered grids and page transitions. `tw-animate-css` is already installed for simple enter/exit effects.
+- [ ] Add micro-interactions: add-to-cart feedback that animates the cart badge, card hover lift, and skeleton shimmer while loading.
+- [ ] Respect `prefers-reduced-motion` everywhere.
+- [ ] Performance budget: use `next/image` with proper sizes, a priority-loaded hero image, and aim for LCP under 2.5 s. Animations should use only `transform` and `opacity`.
+
+### Product page & polish
+- [ ] Product page: image gallery, related products, stock indicator, breadcrumbs.
+- [ ] Customer account area (`/account`): profile, password change, order detail with tracking.
+- [ ] Empty, loading and error states for every page, and SEO metadata and Open Graph images per product.
+
+---
+
+## Phase 4: Emails & notifications (≈3–4 days)
+
+- [ ] Transactional email (Resend or Postmark with React Email): order confirmation, shipped with tracking, refund issued, password reset, admin invite.
+- [ ] Admin notifications for new orders, low stock and failed webhooks.
+
+## Phase 5: Hardening & launch (≈1 week)
+
+- [ ] Move customer auth to httpOnly cookies as well, plus a refresh flow.
+- [ ] Stock reservation at checkout. The README already notes the overselling risk.
+- [ ] Webhook event log (store processed `event.id`s) for idempotency and debugging.
+- [ ] End-to-end tests (Playwright) for checkout, admin login and refunds.
+- [ ] CI (GitHub Actions): typecheck, test, build.
+- [ ] Monitoring (Sentry), structured logs, and a `/health` check that includes the database.
+- [ ] Deployment: client on Vercel, API on Render, Railway or Fly, and MongoDB Atlas. Production Stripe keys and webhook endpoint.
+
+---
+
+## Suggested order
+
+```
+Phase 0 ──► Phase 1 (admin auth) ──► Phase 2a/2b/2c ──► 2d ──► 2e (finance) ──► 2f
+                     └──────────────► Phase 3 (landing) in parallel ─────────────┘
+                                                                     ──► Phase 4 ──► Phase 5
+```
+
+Phase 1 goes first because it changes the user model and moves every admin endpoint. Building admin screens before it means building them twice. In Phase 2, finance comes after orders because refunds and ledgers depend on the payment-intent data that the orders work starts storing.
