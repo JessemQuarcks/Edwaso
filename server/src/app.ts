@@ -67,9 +67,9 @@ export function createApp(): Express {
   app.get(
     '/api/settings',
     asyncHandler(async (_req, res) => {
-      const { storeName, currency, supportEmail, storefront } = await getSettings();
+      const { storeName, currency, supportEmail, storefront, shippingCountries } = await getSettings();
       res.set('Cache-Control', 'public, max-age=60');
-      res.json({ storeName, currency, supportEmail, storefront });
+      res.json({ storeName, currency, supportEmail, storefront, shippingCountries });
     })
   );
 

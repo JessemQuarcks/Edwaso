@@ -21,6 +21,9 @@
     --color-delta-good: var(--delta-good);
     --color-delta-bad: var(--delta-bad);
     --color-status-warning: var(--status-warning);
+    --color-brand: var(--brand);
+    --color-brand-foreground: var(--brand-foreground);
+    --color-brand-soft: var(--brand-soft);
     --color-chart-4: var(--chart-4);
     --color-chart-3: var(--chart-3);
     --color-chart-2: var(--chart-2);
@@ -97,6 +100,11 @@
     --delta-good: #006300;
     --delta-bad: #d03b3b;
     --status-warning: #fab219;
+
+    /* Storefront brand accent (announcement bar, sale badges, eyebrow chips). */
+    --brand: oklch(0.62 0.17 42);
+    --brand-foreground: oklch(0.99 0 0);
+    --brand-soft: oklch(0.96 0.03 60);
 }
 
 .dark {
@@ -141,6 +149,10 @@
     --delta-good: #0ca30c;
     --delta-bad: #e66767;
     --status-warning: #fab219;
+
+    --brand: oklch(0.72 0.15 45);
+    --brand-foreground: oklch(0.18 0.02 40);
+    --brand-soft: oklch(0.26 0.03 50);
 }
 
 @layer base {
@@ -153,4 +165,32 @@
   html {
     @apply font-sans;
     }
+}
+/* ---- Storefront motion. Everything here is transform/opacity only, and off for reduced motion. */
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+@keyframes ken-burns {
+  from { transform: scale(1.08); }
+  to { transform: scale(1); }
+}
+@keyframes drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(3%, -4%) scale(1.08); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate-shimmer {
+    background-image: linear-gradient(90deg, transparent 0%, color-mix(in oklch, var(--foreground) 6%, transparent) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+  .animate-float-slow { animation: float-slow 6s ease-in-out infinite; }
+  .animate-ken-burns { animation: ken-burns 12s ease-out both; }
+  .animate-drift { animation: drift 18s ease-in-out infinite; }
 }

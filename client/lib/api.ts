@@ -37,7 +37,8 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
-    cache: 'no-store',
+    // Fresh by default; pass `next: { revalidate }` from a server component to cache instead.
+    ...(init.next ? {} : { cache: 'no-store' as const }),
     ...init,
   });
 
