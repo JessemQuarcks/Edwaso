@@ -50,8 +50,26 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   return data as T;
 }
 
-export const formatPrice = (cents: number): string =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
+// The store has a single currency (Settings, locked once there are orders), so formatting uses a
+// module-level default set by the root layout on the server and by <Providers> in the browser.
+let storeCurrency = 'USD';
+const formatters = new Map<string, Intl.NumberFormat>();
+
+export function setStoreCurrency(currency: string): void {
+  storeCurrency = currency.toUpperCase();
+}
+
+export const getStoreCurrency = (): string => storeCurrency;
+
+export function formatPrice(cents: number, currency = storeCurrency): string {
+  const code = currency.toUpperCase();
+  let fmt = formatters.get(code);
+  if (!fmt) {
+    fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: code });
+    formatters.set(code, fmt);
+  }
+  return fmt.format(cents / 100);
+}
 
 export const errorMessage = (err: unknown): string =>
   err instanceof Error ? err.message : 'Something went wrong';

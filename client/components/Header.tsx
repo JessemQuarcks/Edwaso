@@ -6,17 +6,18 @@ import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import ThemeToggle from './ThemeToggle';
-import { useAuth, useCart } from './Providers';
+import { useAuth, useCart, useStore } from './Providers';
 
 export default function Header() {
   const { user, ready, logout } = useAuth();
   const { count } = useCart();
+  const { storeName } = useStore();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4">
         <Link href="/" className="text-lg font-semibold tracking-tight">
-          Shop
+          {storeName}
         </Link>
 
         <nav className="flex items-center gap-1 sm:gap-2">

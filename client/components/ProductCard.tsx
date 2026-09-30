@@ -35,7 +35,12 @@ export default function ProductCard({ product }: { product: Product }) {
       </CardContent>
 
       <CardFooter className="flex items-center justify-between gap-2 px-4 pb-4">
-        <span className="font-semibold tabular-nums">{formatPrice(product.price)}</span>
+        <span className="flex items-baseline gap-1.5">
+          <span className="font-semibold tabular-nums">{formatPrice(product.price)}</span>
+          {product.compareAtPrice && product.compareAtPrice > product.price && (
+            <span className="text-xs text-muted-foreground line-through tabular-nums">{formatPrice(product.compareAtPrice)}</span>
+          )}
+        </span>
         <AddToCartButton product={product} size="sm" />
       </CardFooter>
     </Card>

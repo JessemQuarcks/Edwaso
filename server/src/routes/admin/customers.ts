@@ -210,6 +210,8 @@ interface ActivityEvent {
   detail?: string;
   orderId?: string;
   actor?: string;
+  /** Money involved (refunds), in cents. */
+  amount?: number;
 }
 
 const ORDER_EVENT: Record<string, string> = {
@@ -249,7 +251,7 @@ router.get(
         events.push({ at: h.at, kind: 'order', title: ORDER_EVENT[h.status] ?? h.status, detail: h.note, orderId });
       }
       for (const r of o.refunds) {
-        events.push({ at: r.createdAt, kind: 'order', title: `Refund of ${(r.amount / 100).toFixed(2)}`, detail: r.reason, orderId });
+        events.push({ at: r.createdAt, kind: 'order', title: 'Refund issued', amount: r.amount, detail: r.reason, orderId });
       }
     }
     for (const e of emails) {

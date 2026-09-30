@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import AddToCartButton from '@/components/AddToCartButton';
+import ProductGallery from '@/components/ProductGallery';
 import { PLACEHOLDER_IMAGE } from '@/components/ProductCard';
 import type { Product, ProductResponse } from '@/types';
 
@@ -33,12 +34,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
       </Link>
 
       <div className="grid gap-8 md:grid-cols-2">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={product.image || PLACEHOLDER_IMAGE}
-          alt={product.name}
-          className="aspect-square w-full rounded-xl border bg-muted object-cover"
-        />
+        <ProductGallery images={product.images?.length ? product.images : [product.image || PLACEHOLDER_IMAGE]} name={product.name} />
 
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
@@ -46,7 +42,17 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
               {product.category}
             </Badge>
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{product.name}</h1>
-            <p className="text-3xl font-semibold tabular-nums">{formatPrice(product.price)}</p>
+            <p className="flex items-baseline gap-3">
+              <span className="text-3xl font-semibold tabular-nums">{formatPrice(product.price)}</span>
+              {product.compareAtPrice && product.compareAtPrice > product.price && (
+                <>
+                  <span className="text-lg text-muted-foreground line-through tabular-nums">{formatPrice(product.compareAtPrice)}</span>
+                  <Badge variant="destructive">
+                    {Math.round(((product.compareAtPrice - product.price) / product.compareAtPrice) * 100)}% off
+                  </Badge>
+                </>
+              )}
+            </p>
           </div>
 
           <Separator />

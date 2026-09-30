@@ -9,8 +9,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { api, clearToken, getToken, setToken } from '@/lib/api';
-import type { AuthResponse, CartItem, MeResponse, Product, User } from '@/types';
+import { api, clearToken, getToken, setStoreCurrency, setToken } from '@/lib/api';
+import type { AuthResponse, CartItem, MeResponse, Product, StoreInfo, User } from '@/types';
 
 interface AuthValue {
   user: User | null;
@@ -48,7 +48,18 @@ export function useCart(): CartValue {
 
 const CART_KEY = 'cart';
 
-export default function Providers({ children }: { children: ReactNode }) {
+const StoreContext = createContext<StoreInfo | null>(null);
+
+/** Store name, currency and support email (from Settings). */
+export function useStore(): StoreInfo {
+  const ctx = useContext(StoreContext);
+  if (!ctx) throw new Error('useStore must be used inside <Providers>');
+  return ctx;
+}
+
+export default function Providers({ children, store }: { children: ReactNode; store: StoreInfo }) {
+  // Before any child renders, so every price on the first paint uses the store currency.
+  setStoreCurrency(store.currency);
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [items, setItems] = useState<CartItem[]>([]);
@@ -141,8 +152,10 @@ export default function Providers({ children }: { children: ReactNode }) {
   );
 
   return (
-    <AuthContext.Provider value={auth}>
-      <CartContext.Provider value={cart}>{children}</CartContext.Provider>
-    </AuthContext.Provider>
+    <StoreContext.Provider value={store}>
+      <AuthContext.Provider value={auth}>
+        <CartContext.Provider value={cart}>{children}</CartContext.Provider>
+      </AuthContext.Provider>
+    </StoreContext.Provider>
   );
 }

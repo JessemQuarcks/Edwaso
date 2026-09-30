@@ -285,6 +285,23 @@ describe('orders', () => {
     expect(customerView.status).toBe(404); // and notes never appear on the storefront API
   });
 
+  it('never shows staff notes, costs or fees to the customer', async () => {
+    const { agent } = await signedInStaff({ role: 'staff' });
+    const email = uniqueEmail();
+    const token = await customerToken(email);
+    const buyer = await User.findOne({ email });
+    const order = await paidOrder(buyer!._id);
+    await agent.post(`/api/admin/orders/${order.id}/notes`).send({ body: 'Suspicious address' }).expect(201);
+
+    for (const path of [`/api/orders/${order.id}`, '/api/orders/mine']) {
+      const res = await request(app).get(path).set('Authorization', `Bearer ${token}`).expect(200);
+      const json = JSON.stringify(res.body);
+      expect(json, path).not.toContain('Suspicious address');
+      expect(json, path).not.toContain('costPrice');
+      expect(json, path).not.toContain('"fee"');
+    }
+  });
+
   it('filters by date and amount', async () => {
     const { agent } = await signedInStaff();
     const buyer = await customer();

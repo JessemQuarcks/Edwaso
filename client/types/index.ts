@@ -6,9 +6,17 @@ export interface Product {
   description: string;
   /** Cents. Render with `formatPrice`. */
   price: number;
+  /** "Was" price, shown struck through when higher than `price`. */
+  compareAtPrice?: number;
+  sku?: string;
+  /** Gallery; `image` is the first one. */
+  images: string[];
   image: string;
+  /** Category slug. */
   category: string;
   stock: number;
+  featured: boolean;
+  status: 'draft' | 'active' | 'archived';
   createdAt: string;
   updatedAt: string;
 }
@@ -26,7 +34,7 @@ export interface PopulatedUser {
   email: string;
 }
 
-export type OrderStatus = 'pending' | 'paid' | 'shipped' | 'cancelled';
+export type OrderStatus = 'pending' | 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
 
 export interface OrderItem {
   product: string;
@@ -67,8 +75,20 @@ export interface ProductsResponse {
 export interface ProductResponse {
   product: Product;
 }
+export interface CategoryInfo {
+  slug: string;
+  name: string;
+  image: string;
+}
 export interface CategoriesResponse {
+  /** Slugs. */
   categories: string[];
+  items: CategoryInfo[];
+}
+export interface StoreInfo {
+  storeName: string;
+  currency: string;
+  supportEmail: string;
 }
 export interface AuthResponse {
   token: string;

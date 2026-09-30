@@ -6,6 +6,9 @@ import { asyncHandler, HttpError } from '../middleware/error.js';
 // A customer's own orders. Order management lives under /api/admin/orders.
 const router = Router();
 
+/** Staff-only fields: internal notes, unit costs, Stripe fees and who issued a refund. */
+const PRIVATE_FIELDS = '-notes -items.costPrice -payment -refunds.by -stripeSessionId';
+
 router.use(protect);
 
 router.get(
@@ -13,9 +16,9 @@ router.get(
   asyncHandler(async (req, res) => {
     const user = requireUser(req);
     // Pending orders are unpaid checkout attempts; hide them from the customer.
-    const orders = await Order.find({ user: user._id, status: { $ne: 'pending' } }).sort({
-      createdAt: -1,
-    });
+    const orders = await Order.find({ user: user._id, status: { $ne: 'pending' } })
+      .select(PRIVATE_FIELDS)
+      .sort({ createdAt: -1 });
     res.json({ orders });
   })
 );
@@ -24,7 +27,7 @@ router.get(
   '/:id',
   asyncHandler(async (req, res) => {
     const user = requireUser(req);
-    const order = await Order.findById(req.params.id);
+    const order = await Order.findById(req.params.id).select(PRIVATE_FIELDS);
     if (!order || !order.user.equals(user._id)) throw new HttpError(404, 'Order not found');
     res.json({ order });
   })
