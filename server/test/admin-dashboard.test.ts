@@ -187,7 +187,10 @@ describe('products console', () => {
     const search = await agent.get('/api/admin/products?q=hood').expect(200);
     expect(search.body.products).toHaveLength(1);
     expect(search.body.products[0]).toMatchObject({ name: 'Cotton Hoodie', sold: 3 });
-    expect(search.body.counts).toEqual({ all: 3, low: 1, out: 1 });
+    // Tab counts follow the search, like the order tabs.
+    expect(search.body.counts).toEqual({ all: 1, low: 1, out: 0, archived: 0 });
+    const everything = await agent.get('/api/admin/products').expect(200);
+    expect(everything.body.counts).toEqual({ all: 3, low: 1, out: 1, archived: 0 });
 
     const out = await agent.get('/api/admin/products?stock=out').expect(200);
     expect(out.body.products.map((p: { name: string }) => p.name)).toEqual(['Canvas Bag']);
