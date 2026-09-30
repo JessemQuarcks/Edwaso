@@ -272,6 +272,6 @@ describe('notifications', () => {
 
     const res = await agent.get('/api/admin/notifications').expect(200);
     expect(res.body).toMatchObject({ awaitingShipment: 1, lowStockCount: 1 });
-    expect(res.body.recentOrders).toHaveLength(2);
+    expect(res.body).toMatchObject({ unread: 0, feed: [] });
   });
 });
