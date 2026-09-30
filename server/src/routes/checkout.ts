@@ -8,6 +8,7 @@ import { asyncHandler, HttpError } from '../middleware/error.js';
 import { objectIdSchema, parse } from '../middleware/validate.js';
 import { z } from 'zod';
 import { getStripe } from '../config/stripe.js';
+import { syncPendingOrder } from '../lib/checkout-sync.js';
 
 const router = Router();
 
@@ -98,6 +99,25 @@ router.post(
       await order.deleteOne();
       throw err;
     }
+  })
+);
+
+const confirmSchema = z.object({ sessionId: z.string().trim().min(1).max(255) });
+
+/**
+ * Called by the success page after Stripe redirects back. Confirms the payment with Stripe
+ * directly, so the order is marked paid even if the webhook is delayed or can't reach the API.
+ */
+router.post(
+  '/confirm',
+  protect,
+  asyncHandler(async (req, res) => {
+    const user = requireUser(req);
+    const { sessionId } = parse(confirmSchema, req.body);
+    const found = await Order.findOne({ stripeSessionId: sessionId, user: user._id });
+    if (!found) throw new HttpError(404, 'Order not found');
+    const { order, checkoutUrl } = await syncPendingOrder(found);
+    res.json({ order: { _id: order.id, status: order.status, total: order.total, currency: order.currency }, checkoutUrl });
   })
 );
 
