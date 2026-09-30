@@ -1,23 +1,39 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowLeft, CircleDollarSign, Loader2, MapPin, PackageCheck, ShoppingCart, Truck, User, XCircle } from 'lucide-react';
+import {
+  ArrowLeft,
+  CircleDollarSign,
+  ExternalLink,
+  FileText,
+  Loader2,
+  MapPin,
+  MessageSquare,
+  PackageCheck,
+  PackageOpen,
+  Printer,
+  RotateCcw,
+  ShoppingCart,
+  Trash2,
+  Truck,
+  User,
+  XCircle,
+} from 'lucide-react';
 import { errorMessage } from '@/lib/api';
 import { adminApi } from '@/lib/admin-api';
 import { useAdminQuery } from '@/lib/use-admin-query';
-import { formatDateTime, formatPrice, orderNumber } from '@/lib/admin-format';
+import { formatDateTime, formatPrice, orderNumber, timeAgo } from '@/lib/admin-format';
 import { cn } from '@/lib/utils';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
 import FormError from '@/components/admin/FormError';
-import { useNotifications } from '@/components/admin/AdminNotifications';
+import OrderActions from '@/components/admin/OrderActions';
+import { useAdmin } from '@/components/admin/AdminShell';
 import { useToast } from '@/components/admin/Toaster';
 import { Avatar, Thumb } from '@/components/admin/kit';
 import { EASE_OUT, Stagger, StaggerItem } from '@/components/admin/motion';
@@ -27,15 +43,21 @@ import type { OrderStatus } from '@/types';
 const STEP_ICON: Record<OrderStatus, typeof Truck> = {
   pending: ShoppingCart,
   paid: CircleDollarSign,
+  processing: PackageOpen,
   shipped: Truck,
+  delivered: PackageCheck,
   cancelled: XCircle,
+  refunded: RotateCcw,
 };
 
 const STEP_LABEL: Record<OrderStatus, string> = {
   pending: 'Order placed',
   paid: 'Payment received',
+  processing: 'Processing started',
   shipped: 'Shipped',
+  delivered: 'Delivered',
   cancelled: 'Cancelled',
+  refunded: 'Refunded in full',
 };
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -54,6 +76,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   const { order } = data;
   const itemCount = order.items.reduce((n, i) => n + i.quantity, 0);
+  const partlyRefunded = order.amountRefunded > 0 && !['refunded', 'cancelled'].includes(order.status);
 
   return (
     <div className="flex flex-col gap-6">
@@ -62,16 +85,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <h2 className="text-2xl font-semibold tracking-tight">Order {orderNumber(order._id)}</h2>
-            <OrderStatusBadge status={order.status} className="text-sm" />
+            <OrderStatusBadge status={order.status} partiallyRefunded={partlyRefunded} className="text-sm" />
           </div>
-          <p className="text-sm text-muted-foreground">Placed {formatDateTime(order.createdAt)}</p>
+          <div className="flex items-center gap-2">
+            <span className="mr-2 text-sm text-muted-foreground">Placed {formatDateTime(order.createdAt)}</span>
+            <a href={`/admin/print/orders/${order._id}/invoice`} target="_blank" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              <FileText /> Invoice
+            </a>
+            <a href={`/admin/print/orders/${order._id}/packing-slip`} target="_blank" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              <Printer /> Packing slip
+            </a>
+          </div>
         </div>
       </div>
 
-      <Actions data={data} onChange={setData} />
+      <OrderActions data={data} onChange={setData} />
 
       <Stagger className="grid gap-6 lg:grid-cols-3">
-        <div className="flex flex-col gap-6 lg:col-span-2">
+        <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
           <StaggerItem>
             <Card className="gap-0 py-0">
               <CardHeader className="border-b py-4">
@@ -88,16 +119,28 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         {item.name}
                       </Link>
                       <p className="text-sm text-muted-foreground tabular-nums">
-                        {item.quantity} × {formatPrice(item.price)}
+                        {item.sku && <>{item.sku} · </>}
+                        {item.quantity} × {formatPrice(item.price, order.currency)}
                       </p>
                     </div>
-                    <span className="font-medium tabular-nums">{formatPrice(item.price * item.quantity)}</span>
+                    <span className="font-medium tabular-nums">{formatPrice(item.price * item.quantity, order.currency)}</span>
                   </li>
                 ))}
               </ul>
-              <div className="flex items-center justify-between border-t px-6 py-4 font-semibold">
-                <span>Total</span>
-                <span className="tabular-nums">{formatPrice(order.total)}</span>
+              <div className="flex flex-col gap-1.5 border-t px-6 py-4 text-sm">
+                {order.payment?.amountTax ? (
+                  <Row label="Tax" value={formatPrice(order.payment.amountTax, order.currency)} />
+                ) : null}
+                {order.payment?.amountShipping ? (
+                  <Row label="Shipping" value={formatPrice(order.payment.amountShipping, order.currency)} />
+                ) : null}
+                <Row label="Total" value={formatPrice(order.payment?.amountTotal ?? order.total, order.currency)} strong />
+                {order.amountRefunded > 0 && (
+                  <>
+                    <Row label="Refunded" value={`− ${formatPrice(order.amountRefunded, order.currency)}`} />
+                    <Row label="Net after refunds" value={formatPrice(order.total - order.amountRefunded, order.currency)} strong />
+                  </>
+                )}
               </div>
             </Card>
           </StaggerItem>
@@ -105,9 +148,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <StaggerItem>
             <Timeline order={order} />
           </StaggerItem>
+
+          <StaggerItem>
+            <Notes order={order} onChange={setData} />
+          </StaggerItem>
         </div>
 
-        <div className="flex flex-col gap-6">
+        <div className="flex min-w-0 flex-col gap-6">
           <StaggerItem>
             <Card className="gap-3">
               <CardHeader>
@@ -135,24 +182,39 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <Card className="gap-3">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <MapPin className="size-4" /> Shipping address
+                  <MapPin className="size-4" /> Shipping
                 </CardTitle>
               </CardHeader>
-              <CardContent className="text-sm">
+              <CardContent className="flex flex-col gap-3 text-sm">
                 {order.shippingAddress?.line1 ? (
                   <address className="not-italic leading-relaxed">
                     {order.shippingAddress.name && <span className="block font-medium">{order.shippingAddress.name}</span>}
                     <span className="block">{order.shippingAddress.line1}</span>
                     {order.shippingAddress.line2 && <span className="block">{order.shippingAddress.line2}</span>}
                     <span className="block">
-                      {[order.shippingAddress.city, order.shippingAddress.state, order.shippingAddress.postalCode]
-                        .filter(Boolean)
-                        .join(', ')}
+                      {[order.shippingAddress.city, order.shippingAddress.state, order.shippingAddress.postalCode].filter(Boolean).join(', ')}
                     </span>
                     <span className="block">{order.shippingAddress.country}</span>
                   </address>
                 ) : (
                   <p className="text-muted-foreground">Collected by Stripe once the order is paid.</p>
+                )}
+                {order.fulfillment?.shippedAt && (
+                  <div className="rounded-lg bg-muted/60 p-3">
+                    <p className="font-medium">
+                      {order.fulfillment.carrier ?? 'Shipped'}
+                      {order.fulfillment.trackingNumber && <span className="font-normal text-muted-foreground"> · {order.fulfillment.trackingNumber}</span>}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Shipped {formatDateTime(order.fulfillment.shippedAt)}
+                      {order.fulfillment.deliveredAt && <> · delivered {formatDateTime(order.fulfillment.deliveredAt)}</>}
+                    </p>
+                    {order.fulfillment.trackingUrl && (
+                      <a href={order.fulfillment.trackingUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs font-medium hover:underline">
+                        Track parcel <ExternalLink className="size-3" />
+                      </a>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -166,23 +228,50 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-1.5 text-sm">
-                <p className="flex justify-between gap-2">
-                  <span className="text-muted-foreground">Paid</span>
-                  <span>{order.paidAt ? formatDateTime(order.paidAt) : 'Not yet'}</span>
-                </p>
-                {order.stripeSessionId && (
+                <Row label="Paid" value={order.paidAt ? formatDateTime(order.paidAt) : 'Not yet'} />
+                {order.payment?.fee !== undefined && (
+                  <>
+                    <Row label="Stripe fee" value={`− ${formatPrice(order.payment.fee, order.currency)}`} />
+                    <Row label="Net payout" value={formatPrice(order.payment.net ?? 0, order.currency)} strong />
+                  </>
+                )}
+                {order.payment?.paymentIntentId && (
                   <p className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Stripe session</span>
-                    <code className="max-w-40 truncate text-xs" title={order.stripeSessionId}>
-                      {order.stripeSessionId}
+                    <span className="text-muted-foreground">Payment</span>
+                    <code className="max-w-44 truncate text-xs" title={order.payment.paymentIntentId}>
+                      {order.payment.paymentIntentId}
                     </code>
                   </p>
+                )}
+                {order.refunds.length > 0 && (
+                  <div className="mt-2 flex flex-col gap-1.5 border-t pt-3">
+                    <p className="font-medium">Refunds</p>
+                    {order.refunds.map((r) => (
+                      <div key={r.refundId} className="flex items-start justify-between gap-2">
+                        <span className="min-w-0 text-xs text-muted-foreground">
+                          {formatDateTime(r.createdAt)}
+                          {r.by && <> · {r.by.name}</>}
+                          {r.reason && <span className="block truncate">{r.reason}</span>}
+                        </span>
+                        <span className="tabular-nums">− {formatPrice(r.amount, order.currency)}</span>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </CardContent>
             </Card>
           </StaggerItem>
         </div>
       </Stagger>
+    </div>
+  );
+}
+
+function Row({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className={cn('flex justify-between gap-2', strong && 'font-semibold')}>
+      <span className={strong ? '' : 'text-muted-foreground'}>{label}</span>
+      <span className="tabular-nums">{value}</span>
     </div>
   );
 }
@@ -196,115 +285,92 @@ function BackLink() {
   );
 }
 
-function Actions({ data, onChange }: { data: OrderDetailResponse; onChange: (d: OrderDetailResponse) => void }) {
-  const { order, allowedTransitions } = data;
+function Notes({ order, onChange }: { order: AdminOrder; onChange: (d: OrderDetailResponse) => void }) {
+  const admin = useAdmin();
   const toast = useToast();
-  const { refresh } = useNotifications();
-  const [cancelling, setCancelling] = useState(false);
-  const [note, setNote] = useState('');
-  const [restock, setRestock] = useState(true);
-  const [busy, setBusy] = useState<OrderStatus | null>(null);
+  const [body, setBody] = useState('');
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const notes = [...(order.notes ?? [])].reverse();
 
-  if (allowedTransitions.length === 0) return null;
-
-  async function change(status: OrderStatus) {
+  async function add(e: FormEvent) {
+    e.preventDefault();
+    if (!body.trim()) return;
+    setBusy(true);
     setError('');
-    setBusy(status);
     try {
-      const body = status === 'cancelled' ? { status, note: note || undefined, restock: order.status === 'paid' && restock } : { status };
-      const result = await adminApi<OrderDetailResponse>(`/orders/${order._id}/status`, { method: 'PATCH', body });
-      onChange(result);
-      refresh();
-      setCancelling(false);
-      toast(status === 'shipped' ? 'Order marked as shipped' : 'Order cancelled', {
-        description: orderNumber(order._id),
-      });
+      onChange(await adminApi<OrderDetailResponse>(`/orders/${order._id}/notes`, { method: 'POST', body: { body } }));
+      setBody('');
     } catch (err) {
       setError(errorMessage(err));
     } finally {
-      setBusy(null);
+      setBusy(false);
+    }
+  }
+
+  async function remove(noteId: string) {
+    try {
+      onChange(await adminApi<OrderDetailResponse>(`/orders/${order._id}/notes/${noteId}`, { method: 'DELETE' }));
+      toast('Note deleted');
+    } catch (err) {
+      setError(errorMessage(err));
     }
   }
 
   return (
-    <Card className="gap-3 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm">
-          {order.status === 'paid'
-            ? 'Paid and ready to ship.'
-            : order.status === 'pending'
-              ? 'Waiting for the customer to finish paying.'
-              : ''}
-        </p>
-        <div className="flex gap-2">
-          {allowedTransitions.includes('cancelled') && !cancelling && (
-            <Button variant="outline" onClick={() => setCancelling(true)}>
-              <XCircle />
-              Cancel order
-            </Button>
-          )}
-          {allowedTransitions.includes('shipped') && (
-            <Button onClick={() => void change('shipped')} disabled={busy !== null}>
-              {busy === 'shipped' ? <Loader2 className="animate-spin" /> : <PackageCheck />}
-              Mark as shipped
-            </Button>
-          )}
-        </div>
-      </div>
-
-      <AnimatePresence initial={false}>
-        {cancelling && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: EASE_OUT }}
-            className="overflow-hidden"
-          >
-            <div className="flex flex-col gap-3 border-t pt-4">
-              {order.status === 'paid' && (
-                <Alert>
-                  <CircleDollarSign />
-                  <AlertDescription>
-                    Cancelling doesn’t refund the customer. Issue the refund from your Stripe dashboard.
-                  </AlertDescription>
-                </Alert>
-              )}
-              <div className="grid gap-2">
-                <Label htmlFor="cancel-note">Reason (optional, visible to staff)</Label>
-                <Textarea id="cancel-note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} />
-              </div>
-              {order.status === 'paid' && (
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={restock} onChange={(e) => setRestock(e.target.checked)} className="size-4 accent-primary" />
-                  Put the items back in stock
-                </label>
-              )}
-              <FormError message={error} />
-              <div className="flex gap-2">
-                <Button variant="destructive" onClick={() => void change('cancelled')} disabled={busy !== null}>
-                  {busy === 'cancelled' && <Loader2 className="animate-spin" />}
-                  Cancel order
-                </Button>
-                <Button variant="ghost" onClick={() => setCancelling(false)}>
-                  Keep order
-                </Button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      {!cancelling && <FormError message={error} />}
+    <Card className="gap-3">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MessageSquare className="size-4" /> Internal notes
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <form onSubmit={add} className="flex flex-col gap-2">
+          <Textarea rows={2} maxLength={2000} placeholder="Add a note for the team. Customers never see these." value={body} onChange={(e) => setBody(e.target.value)} />
+          <Button type="submit" size="sm" className="self-end" disabled={busy || !body.trim()}>
+            {busy && <Loader2 className="animate-spin" />}
+            Add note
+          </Button>
+        </form>
+        <FormError message={error} />
+        <ul className="flex flex-col gap-2">
+          <AnimatePresence initial={false}>
+            {notes.map((n) => {
+              const mine = n.author?._id === admin.id;
+              return (
+                <motion.li
+                  key={n._id}
+                  layout
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.25, ease: EASE_OUT }}
+                  className="group flex gap-3 rounded-lg bg-muted/60 p-3 text-sm"
+                >
+                  <Avatar name={n.author?.name ?? '?'} className="size-7" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">{n.author?.name ?? 'Former staff'}</span> · {timeAgo(n.createdAt)}
+                    </p>
+                    <p className="mt-0.5 whitespace-pre-wrap">{n.body}</p>
+                  </div>
+                  {(mine || admin.role !== 'staff') && (
+                    <Button variant="ghost" size="icon-xs" className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100" onClick={() => void remove(n._id)} aria-label="Delete note">
+                      <Trash2 />
+                    </Button>
+                  )}
+                </motion.li>
+              );
+            })}
+          </AnimatePresence>
+        </ul>
+      </CardContent>
     </Card>
   );
 }
 
 function Timeline({ order }: { order: AdminOrder }) {
-  const steps = [
-    { status: 'pending' as OrderStatus, at: order.createdAt, note: undefined, by: undefined },
-    ...order.statusHistory,
-  ];
+  const steps = [{ status: 'pending' as OrderStatus, at: order.createdAt, note: undefined, by: undefined }, ...order.statusHistory];
   return (
     <Card className="gap-3">
       <CardHeader>
@@ -321,7 +387,7 @@ function Timeline({ order }: { order: AdminOrder }) {
                 className="relative flex gap-3"
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.2 + i * 0.12, duration: 0.35, ease: EASE_OUT }}
+                transition={{ delay: 0.2 + i * 0.1, duration: 0.35, ease: EASE_OUT }}
               >
                 {!last && (
                   <motion.span
@@ -330,15 +396,10 @@ function Timeline({ order }: { order: AdminOrder }) {
                     style={{ height: 'calc(100% - 12px)' }}
                     initial={{ scaleY: 0 }}
                     animate={{ scaleY: 1 }}
-                    transition={{ delay: 0.3 + i * 0.12, duration: 0.4 }}
+                    transition={{ delay: 0.3 + i * 0.1, duration: 0.4 }}
                   />
                 )}
-                <span
-                  className={cn(
-                    'relative flex size-8 shrink-0 items-center justify-center rounded-full border bg-card',
-                    last && 'border-transparent bg-primary text-primary-foreground'
-                  )}
-                >
+                <span className={cn('relative flex size-8 shrink-0 items-center justify-center rounded-full border bg-card', last && 'border-transparent bg-primary text-primary-foreground')}>
                   <Icon className="size-4" />
                 </span>
                 <div className="min-w-0 pt-1 text-sm">
@@ -347,9 +408,7 @@ function Timeline({ order }: { order: AdminOrder }) {
                     {formatDateTime(step.at)}
                     {step.by && <> · by {step.by.name}</>}
                   </p>
-                  {step.note && step.note !== STEP_LABEL[step.status] && (
-                    <p className="mt-1 rounded-md bg-muted px-2 py-1">{step.note}</p>
-                  )}
+                  {step.note && step.note !== STEP_LABEL[step.status] && <p className="mt-1 rounded-md bg-muted px-2 py-1">{step.note}</p>}
                 </div>
               </motion.li>
             );
