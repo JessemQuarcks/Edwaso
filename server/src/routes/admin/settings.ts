@@ -4,9 +4,11 @@ import Order from '../../models/Order.js';
 import { CURRENCIES } from '../../models/Settings.js';
 import { asyncHandler, HttpError } from '../../middleware/error.js';
 import { parse } from '../../middleware/validate.js';
-import { requireRole } from '../../middleware/adminSession.js';
+import { requireAdmin, requireRole } from '../../middleware/adminSession.js';
 import { audit } from '../../lib/audit.js';
 import { getSettings, updateSettings } from '../../lib/settings.js';
+import { emailConfigured, emailFrom } from '../../lib/mailer.js';
+import { sendTestEmail } from '../../lib/emails.js';
 
 const router = Router();
 
@@ -14,7 +16,19 @@ router.get(
   '/',
   asyncHandler(async (_req, res) => {
     const [settings, hasOrders] = await Promise.all([getSettings(), Order.exists({})]);
-    res.json({ settings, currencyLocked: !!hasOrders });
+    res.json({ settings, currencyLocked: !!hasOrders, email: { configured: emailConfigured(), from: emailFrom() } });
+  })
+);
+
+/** Sends a sample email to the signed-in admin, to check the provider is set up. */
+router.post(
+  '/test-email',
+  requireRole('owner', 'admin'),
+  asyncHandler(async (req, res) => {
+    const { user } = requireAdmin(req);
+    const log = await sendTestEmail(user);
+    await audit(req, 'settings.test_email', { meta: { to: user.email, status: log.status } });
+    res.json({ status: log.status, to: user.email, error: log.error });
   })
 );
 

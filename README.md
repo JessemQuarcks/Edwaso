@@ -88,7 +88,7 @@ admin access, even for an account with an admin role.
   password and enrol 2FA (`/admin/setup`). 2FA is required for every admin role.
 - **Roles**: `staff` manages products and orders; `admin` can also invite staff and read the audit log;
   `owner` can invite admins. Owners are created only from the CLI.
-- **Invites**: the Team page issues a one-time link (valid 24 h) that is shown once. Invites never
+- **Invites**: the Team page emails a one-time link (valid 24 h). Without email set up, the link is shown once to the inviter instead. Invites never
   attach staff access to an existing account: staff use a separate email from any shopping account.
 - **Audit log**: every sign-in, failed attempt and admin write is recorded in `AuditLog`.
 - **Gating** happens in three layers: `client/middleware.ts` redirects when there's no cookie, the
@@ -102,20 +102,22 @@ admin access, even for an account with an admin role.
 | Categories | Names, slugs, images and order for grouping products |
 | Finance | Gross, fees, refunds and net from the Stripe ledger; margin; transactions (CSV); payouts reconciled against the ledger (owners/admins) |
 | Audit log | Every admin action, filterable, with before/after diffs and CSV export (owners/admins) |
-| Settings | Store name, support email, currency, shipping countries, Stripe automatic tax, low-stock threshold, and the storefront's home-page content |
+| Settings | Store name, support email, currency, shipping countries, Stripe automatic tax, low-stock threshold, email status and test, and the storefront's home-page content |
 | Overview (`/admin`) | Date range (24h / 7d / 30d / 12m / all), KPI tiles with change vs the previous period, sales report (revenue this vs previous period), latest transactions, best-sellers carousel, items needing attention |
 | Orders | Status tabs with counts, search by customer/email/order #, sorting, CSV export, detail page with timeline, *Mark as shipped* and *Cancel* (with optional restock) |
 | Products | Search, category and stock filters, units sold, stock meter; create/edit with a live preview |
 | Customers | Lifetime value, order count, last order; detail page with order history; owners/admins can disable accounts and export the newsletter list |
 | Analytics | Revenue, orders, average order value, revenue by category, orders by status, top products and customers |
 | Team | Members (owners/admins change roles and access) and invites |
-| Account & security | Password, 2FA status, signed-in sessions |
+| Account & security | Password, 2FA status, signed-in sessions, email alerts |
 
 Every chart has a table view (the grid icon on its card). Filters live in the URL, so a filtered
 view can be bookmarked or shared. Reports bucket by the admin's own timezone.
 
-The sidebar badge and the bell poll `/api/admin/notifications` every minute: paid orders waiting to
-ship and products at or below 5 in stock.
+The sidebar badge and the bell poll `/api/admin/notifications` every minute. The bell shows what needs
+attention (orders waiting to ship, low stock) and a feed of events: new orders, products crossing into
+low or out of stock, and Stripe webhooks that failed (owners/admins only, marked resolved when Stripe's
+retry succeeds). Each person chooses which of these are also emailed to them in *Account & security*.
 
 Order detail pages have printable invoices and packing slips, refunds (owners/admins) and internal
 notes. Press **Ctrl/⌘ K** anywhere in the console to search orders, products and customers.
@@ -125,8 +127,12 @@ notes. Press **Ctrl/⌘ K** anywhere in the console to search orders, products a
 - **Product images** upload to `server/uploads/` (`UPLOAD_DIR`) and are served at `/uploads/*` with a
   locked-down CSP. Set `PUBLIC_API_URL` to the API's public origin so image URLs work from the storefront.
   For several API servers, implement `ImageStore` in `server/src/lib/storage.ts` against S3/Cloudinary.
-- **Email** (order shipped, password reset) is printed to the API console in development. Set
-  `RESEND_API_KEY` and `EMAIL_FROM` to send for real. Only metadata is logged (`EmailLog`), never bodies.
+- **Email** goes through Resend when `RESEND_API_KEY` and `EMAIL_FROM` (an address on a domain
+  verified in Resend) are set; otherwise it's printed to the API console in development. Customers get
+  order confirmation, shipped (with tracking), refund, cancellation and password-reset emails; staff get
+  invites and opt-in alerts. Replies go to the support email from Settings, which also has a
+  *Send me a test email* button. Only metadata is logged (`EmailLog`), never bodies (some carry one-time links).
+  Templates live in `server/src/lib/emails.ts` and render through `email-template.ts`.
 - **Stripe webhook events** to enable: `checkout.session.completed`, `checkout.session.expired`,
   `charge.refunded`. Payments are recorded with Stripe's fee in the `Transaction` ledger.
 
@@ -246,6 +252,9 @@ not Radix). There is no hand-written CSS beyond the theme tokens.
 | POST | `/api/admin/orders/:id/refunds` | owner, admin |
 | GET | `/api/admin/finance/*`; PATCH `/api/admin/settings` | owner, admin |
 | GET | `/api/admin/search?q=` | admin session, setup complete |
+| GET, POST | `/api/admin/notifications`, `/api/admin/notifications/read` | admin session, setup complete |
+| GET, PUT | `/api/admin/notifications/preferences` (your own email alerts) | admin session, setup complete |
+| POST | `/api/admin/settings/test-email` | owner, admin |
 | GET/POST/DELETE | `/api/admin/invites[/:id]` | owner, admin |
 | GET | `/api/admin/audit`, `/api/admin/customers/subscribers/export` (CSV) | owner, admin |
 

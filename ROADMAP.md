@@ -142,10 +142,16 @@ A dedicated shell: sidebar navigation, a top bar with ⌘K search across orders,
 
 ---
 
-## Phase 4: Emails & notifications (≈3–4 days)
+## Phase 4: Emails & notifications (≈3–4 days) · ✅ done
 
-- [ ] Transactional email (Resend or Postmark with React Email): order confirmation, shipped with tracking, refund issued, password reset, admin invite.
-- [ ] Admin notifications for new orders, low stock and failed webhooks.
+*Built Sep 2026. Deviations from the plan are noted in italics.*
+
+- [x] Transactional email through Resend: **order confirmation** (items, totals, address), **shipped** with carrier, tracking number and tracking link, **refund issued**, **order cancelled** (one email covering the cancellation and its refund), **password reset** and **admin invite**. Replies go to the store's support email. *Templates are a small block renderer (`server/src/lib/email-template.ts`) that produces matching HTML and plain-text bodies with every value escaped, instead of React Email, to keep React off the API.*
+- [x] Emails are idempotent where Stripe can redeliver: the confirmation is sent once per order however often the webhook fires. A failed send is logged and never undoes the payment, refund or status change.
+- [x] Invites are emailed; the link is only shown to the inviter when email isn't set up or the send failed.
+- [x] Admin notifications: a feed under the console bell for **new orders**, **low stock / out of stock** (when a product crosses the threshold, not on every sale) and **failed Stripe webhooks** (once per event, marked resolved when a retry succeeds). Read state is per person; payment problems are shown only to owners and admins.
+- [x] *Per-person email alerts* in Account & security (new orders, stock, payment problems), with sensible role defaults.
+- [x] *Settings shows whether email is connected and can send a test email; the customer activity trail notes emails that weren't sent because email isn't set up.*
 
 ## Phase 5: Hardening & launch (≈1 week)
 

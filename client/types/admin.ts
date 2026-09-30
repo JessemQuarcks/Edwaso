@@ -143,11 +143,34 @@ export interface AnalyticsResponse {
   topCustomers: { customerId: string; name: string; email: string; orders: number; spent: number }[];
 }
 
+export type NotificationType = 'order_paid' | 'low_stock' | 'out_of_stock' | 'webhook_failed';
+
+export interface AdminNotification {
+  _id: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  link?: string;
+  resolvedAt?: string;
+  createdAt: string;
+  read: boolean;
+}
+
 export interface NotificationsResponse {
   awaitingShipment: number;
   lowStock: StockItem[];
   lowStockCount: number;
-  recentOrders: { _id: string; total: number; paidAt: string; user: { _id: string; name: string } | null }[];
+  unread: number;
+  feed: AdminNotification[];
+}
+
+export type NotifyTopic = 'orders' | 'stock' | 'payments';
+
+export interface NotificationPreferencesResponse {
+  email: string;
+  /** Topics this person's role can receive. */
+  topics: NotifyTopic[];
+  preferences: Record<NotifyTopic, boolean>;
 }
 
 // ---- Orders ----
@@ -310,6 +333,7 @@ export interface StoreSettings {
 export interface SettingsResponse {
   settings: StoreSettings;
   currencyLocked: boolean;
+  email: { configured: boolean; from: string };
 }
 
 // ---- Finance ----

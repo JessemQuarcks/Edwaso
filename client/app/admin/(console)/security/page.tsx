@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useAdmin } from '@/components/admin/AdminShell';
 import FormError from '@/components/admin/FormError';
 import PasswordForm from '@/components/admin/PasswordForm';
+import EmailAlerts from '@/components/admin/EmailAlerts';
 import type { AdminSessionInfo } from '@/types/admin';
 
 /** "Chrome on Windows"-style label from a user agent string. Good enough for recognising a device. */
@@ -123,6 +124,8 @@ export default function SecurityPage() {
           </CardContent>
         </Card>
       </div>
+
+      <EmailAlerts />
 
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
