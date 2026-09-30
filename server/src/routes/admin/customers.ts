@@ -11,7 +11,8 @@ import CustomerNote from '../../models/CustomerNote.js';
 import EmailLog from '../../models/EmailLog.js';
 import { audit } from '../../lib/audit.js';
 import { startPasswordReset } from '../../lib/password-reset.js';
-import { escapeRegex } from '../../lib/text.js';
+import { escapeRegex, toCsv } from '../../lib/text.js';
+import Subscriber from '../../models/Subscriber.js';
 
 // Storefront customers. Staff accounts are managed on the team routes.
 const router = Router();
@@ -160,6 +161,27 @@ router.post(
     const log = await startPasswordReset(customer);
     await audit(req, 'customer.password_reset', { entity: 'User', entityId: customer.id, meta: { email: log.status } });
     res.json({ email: log.status });
+  })
+);
+
+// ---- Newsletter subscribers (declared before /:id routes use the path) ----
+
+router.get(
+  '/subscribers/export',
+  requireRole('owner', 'admin'),
+  asyncHandler(async (req, res) => {
+    const subscribers = await Subscriber.find().sort({ createdAt: -1 }).limit(100_000);
+    await audit(req, 'subscribers.export', { meta: { count: subscribers.length } });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="subscribers-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(toCsv(['email', 'subscribed_at', 'source'], subscribers.map((s) => [s.email, s.createdAt.toISOString(), s.source])));
+  })
+);
+
+router.get(
+  '/subscribers/count',
+  asyncHandler(async (_req, res) => {
+    res.json({ count: await Subscriber.countDocuments() });
   })
 );
 

@@ -1,4 +1,4 @@
-import Settings, { CURRENCIES, type Currency, type ISettings } from '../models/Settings.js';
+import Settings, { CURRENCIES, DEFAULT_STOREFRONT, type Currency, type ISettings, type IStorefront } from '../models/Settings.js';
 
 export type StoreSettings = Omit<ISettings, 'key' | 'updatedAt'>;
 
@@ -10,7 +10,17 @@ const DEFAULTS: StoreSettings = {
   shippingCountries: ['US', 'CA', 'GB'],
   automaticTax: false,
   lowStockThreshold: 5,
+  storefront: DEFAULT_STOREFRONT,
 };
+
+/** Older documents may lack newer storefront fields; fill them from the defaults. */
+const withDefaults = (s?: Partial<IStorefront>): IStorefront => ({
+  ...DEFAULT_STOREFRONT,
+  ...s,
+  promo: { ...DEFAULT_STOREFRONT.promo, ...s?.promo },
+  social: { ...DEFAULT_STOREFRONT.social, ...s?.social },
+  testimonials: s?.testimonials ?? [],
+});
 
 // Read on nearly every admin request and every checkout; cached briefly in-process.
 const TTL_MS = 30_000;
@@ -27,6 +37,7 @@ export async function getSettings(): Promise<StoreSettings> {
         shippingCountries: doc.shippingCountries,
         automaticTax: doc.automaticTax,
         lowStockThreshold: doc.lowStockThreshold,
+        storefront: withDefaults(doc.storefront),
       }
     : DEFAULTS;
   cached = { value, at: Date.now() };

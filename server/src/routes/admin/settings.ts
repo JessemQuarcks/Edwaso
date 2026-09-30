@@ -18,6 +18,34 @@ router.get(
   })
 );
 
+const text = (max: number) => z.string().trim().max(max).default('');
+const httpsUrl = z.union([z.literal(''), z.url({ protocol: /^https$/, error: 'Use a full https:// link' })]).default('');
+/** An in-site path ("/shop?category=bags") or an https link; never javascript: or protocol-relative. */
+const linkHref = z
+  .string()
+  .trim()
+  .max(500)
+  .refine((v) => v === '' || (v.startsWith('/') && !v.startsWith('//')) || /^https:\/\/\S+$/.test(v), 'Use a path like /shop or a full https:// link')
+  .default('');
+
+export const storefrontSchema = z.object({
+  announcement: text(160),
+  heroEyebrow: text(40),
+  heroTitle: z.string().trim().min(1, 'The hero needs a headline').max(120),
+  heroSubtitle: text(300),
+  promo: z.object({
+    title: text(120),
+    body: text(600),
+    ctaLabel: text(40),
+    ctaHref: linkHref,
+    image: z.union([z.literal(''), z.url({ protocol: /^https?$/, error: 'Image must be an http(s) URL' })]).default(''),
+  }),
+  testimonials: z
+    .array(z.object({ quote: z.string().trim().min(1, 'Add the quote').max(400), author: z.string().trim().min(1, 'Add who said it').max(80), detail: text(80) }))
+    .max(6, 'Up to 6 testimonials'),
+  social: z.object({ instagram: httpsUrl, facebook: httpsUrl, x: httpsUrl, tiktok: httpsUrl }),
+});
+
 const updateSchema = z
   .object({
     storeName: z.string().trim().min(1, 'Store name is required').max(80),
@@ -29,6 +57,7 @@ const updateSchema = z
       .max(250),
     automaticTax: z.boolean(),
     lowStockThreshold: z.number().int().min(0).max(10_000),
+    storefront: storefrontSchema,
   })
   .partial();
 

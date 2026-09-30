@@ -11,6 +11,7 @@ import productRoutes from './routes/products.js';
 import orderRoutes from './routes/orders.js';
 import checkoutRoutes from './routes/checkout.js';
 import adminRoutes from './routes/admin/index.js';
+import newsletterRoutes from './routes/newsletter.js';
 import { getSettings } from './lib/settings.js';
 import { UPLOAD_DIR, UPLOAD_PATH } from './lib/storage.js';
 
@@ -66,9 +67,9 @@ export function createApp(): Express {
   app.get(
     '/api/settings',
     asyncHandler(async (_req, res) => {
-      const { storeName, currency, supportEmail } = await getSettings();
+      const { storeName, currency, supportEmail, storefront } = await getSettings();
       res.set('Cache-Control', 'public, max-age=60');
-      res.json({ storeName, currency, supportEmail });
+      res.json({ storeName, currency, supportEmail, storefront });
     })
   );
 
@@ -83,6 +84,7 @@ export function createApp(): Express {
   app.use('/api/products', productRoutes);
   app.use('/api/orders', orderRoutes);
   app.use('/api/checkout', checkoutRoutes);
+  app.use('/api/newsletter', newsletterRoutes);
   app.use('/api/admin', adminRoutes);
 
   app.use(notFound);
