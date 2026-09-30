@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
-import { ChevronRight, Users } from 'lucide-react';
+import { ChevronRight, Download, Users } from 'lucide-react';
 import { useAdminQuery, useDebounced } from '@/lib/use-admin-query';
 import { useUrlState } from '@/lib/use-url-state';
 import { formatDate, formatNumber, formatPrice, timeAgo } from '@/lib/admin-format';
@@ -13,7 +13,9 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { buttonVariants } from '@/components/ui/button';
 import FormError from '@/components/admin/FormError';
+import { useAdmin } from '@/components/admin/AdminShell';
 import { Avatar, CountTabs, EmptyState, Pagination, SearchInput } from '@/components/admin/kit';
 import { rowMotion } from '@/components/admin/motion';
 import type { CustomersListResponse } from '@/types/admin';
@@ -43,6 +45,8 @@ export default function CustomersPage() {
 
 function Customers() {
   const router = useRouter();
+  const admin = useAdmin();
+  const subscribers = useAdminQuery<{ count: number }>('/customers/subscribers/count');
   const [url, setUrl] = useUrlState({ status: 'all', q: '', sort: 'newest', page: '1' });
   const [search, setSearch] = useState(url.q);
   const debounced = useDebounced(search);
@@ -62,18 +66,25 @@ function Customers() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search by name or email" className="w-full sm:w-80" />
-        <select
-          aria-label="Sort customers"
-          className={SELECT_CLASS}
-          value={url.sort}
-          onChange={(e) => setUrl({ sort: e.target.value, page: '1' })}
-        >
-          {SORTS.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          {admin.role !== 'staff' && !!subscribers.data?.count && (
+            <a href="/api/admin/customers/subscribers/export" download className={buttonVariants({ variant: 'outline' })}>
+              <Download /> Newsletter list ({formatNumber(subscribers.data.count)})
+            </a>
+          )}
+          <select
+            aria-label="Sort customers"
+            className={SELECT_CLASS}
+            value={url.sort}
+            onChange={(e) => setUrl({ sort: e.target.value, page: '1' })}
+          >
+            {SORTS.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <FormError message={error} />

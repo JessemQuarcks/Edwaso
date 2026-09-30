@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { Geist } from 'next/font/google';
 import { cn } from '@/lib/utils';
 import { getStoreInfo } from '@/lib/store';
+import { SITE_URL } from '@/lib/site';
 import { setStoreCurrency } from '@/lib/api';
 import Providers from '@/components/Providers';
 import { THEME_SCRIPT } from '@/components/ThemeToggle';
@@ -11,8 +12,13 @@ import { THEME_SCRIPT } from '@/components/ThemeToggle';
 const geist = Geist({ subsets: ['latin'], variable: '--font-sans' });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const { storeName } = await getStoreInfo();
-  return { title: { default: storeName, template: `%s · ${storeName}` }, description: `Shop online at ${storeName}` };
+  const { storeName, storefront } = await getStoreInfo();
+  return {
+    metadataBase: new URL(SITE_URL),
+    title: { default: storeName, template: `%s · ${storeName}` },
+    description: storefront.heroSubtitle || `Shop online at ${storeName}`,
+    openGraph: { siteName: storeName, type: 'website' },
+  };
 }
 
 // Shared by the storefront, app/(shop), and the admin console, app/admin. Each has its own layout.

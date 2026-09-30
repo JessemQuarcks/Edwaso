@@ -29,10 +29,10 @@ export default function SuccessPage() {
       </CardHeader>
 
       <CardContent className="flex flex-col gap-2 sm:flex-row sm:justify-center">
-        <Link href="/orders" className={buttonVariants({})}>
+        <Link href="/account/orders" className={buttonVariants({})}>
           View orders
         </Link>
-        <Link href="/" className={buttonVariants({ variant: 'outline' })}>
+        <Link href="/shop" className={buttonVariants({ variant: 'outline' })}>
           Keep shopping
         </Link>
       </CardContent>

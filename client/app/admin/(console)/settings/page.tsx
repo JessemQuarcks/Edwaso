@@ -17,6 +17,7 @@ import { useAdmin } from '@/components/admin/AdminShell';
 import { useToast } from '@/components/admin/Toaster';
 import { SELECT_CLASS } from '@/components/admin/kit';
 import { Stagger, StaggerItem } from '@/components/admin/motion';
+import StorefrontSettings from '@/components/admin/StorefrontSettings';
 import type { SettingsResponse, StoreSettings } from '@/types/admin';
 
 const CURRENCIES = ['usd', 'eur', 'gbp', 'cad', 'aud', 'nzd', 'chf', 'sek', 'nok', 'dkk', 'ghs', 'ngn', 'kes', 'zar'];
@@ -227,6 +228,8 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
           </StaggerItem>
+
+          <StorefrontSettings value={form.storefront} onChange={(v) => set('storefront', v)} />
         </Stagger>
       </fieldset>
 

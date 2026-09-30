@@ -1,6 +1,6 @@
 // Shapes returned by the admin API (server/src/routes/admin).
 
-import type { Order, OrderItem, OrderStatus, Product } from './index';
+import type { Order, OrderItem, OrderStatus, Product, StorefrontContent } from './index';
 
 export type AdminRole = 'staff' | 'admin' | 'owner';
 export type PendingStep = 'change_password' | 'enroll_2fa';
@@ -304,6 +304,7 @@ export interface StoreSettings {
   shippingCountries: string[];
   automaticTax: boolean;
   lowStockThreshold: number;
+  storefront: StorefrontContent;
 }
 
 export interface SettingsResponse {

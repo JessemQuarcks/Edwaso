@@ -49,6 +49,28 @@ npm run admin -- migrate-roles
 
 Migrated admins must change their password and enrol 2FA at their next sign-in.
 
+## Storefront
+
+| Route | What it is |
+| --- | --- |
+| `/` | Landing page: hero, trust bar, category tiles, featured rail, promo, new arrivals, testimonials, newsletter |
+| `/shop` | Catalogue with category, search, price, in-stock and sort filters (all in the URL) |
+| `/products/:id` | Gallery, stock indicator, related products, Open Graph and JSON-LD |
+| `/cart` | Full cart; the header cart button opens a slide-over drawer instead |
+| `/account` | Profile, orders with a delivery tracker, password change (`/orders` redirects here) |
+
+- **Editing the home page**: *Settings → Storefront* in the admin console sets the announcement bar,
+  hero copy, promo section, testimonials and social links. Sections with no content are hidden, and
+  changes show within a minute (pages revalidate every 60 s).
+- **Hero and featured images** come from products marked *featured*; category tiles use the
+  category's image, or its first product's.
+- **Images** go through `next/image` for allow-listed hosts: picsum, the API host from
+  `NEXT_PUBLIC_API_URL`, and any in `NEXT_PUBLIC_IMAGE_HOSTS` (comma-separated, e.g. your CDN).
+  Other hosts and `localhost` use a plain `<img>`.
+- **SEO**: set `NEXT_PUBLIC_SITE_URL` to the public storefront URL; it is used for canonical links,
+  `sitemap.xml`, `robots.txt` and share images.
+- **Motion** uses `motion` and honours the OS "reduce motion" setting.
+
 ## Admin console
 
 The admin console at `/admin` is separate from the storefront. Signing in to the shop never grants
@@ -80,11 +102,11 @@ admin access, even for an account with an admin role.
 | Categories | Names, slugs, images and order for grouping products |
 | Finance | Gross, fees, refunds and net from the Stripe ledger; margin; transactions (CSV); payouts reconciled against the ledger (owners/admins) |
 | Audit log | Every admin action, filterable, with before/after diffs and CSV export (owners/admins) |
-| Settings | Store name, support email, currency, shipping countries, Stripe automatic tax, low-stock threshold |
+| Settings | Store name, support email, currency, shipping countries, Stripe automatic tax, low-stock threshold, and the storefront's home-page content |
 | Overview (`/admin`) | Date range (24h / 7d / 30d / 12m / all), KPI tiles with change vs the previous period, sales report (revenue this vs previous period), latest transactions, best-sellers carousel, items needing attention |
 | Orders | Status tabs with counts, search by customer/email/order #, sorting, CSV export, detail page with timeline, *Mark as shipped* and *Cancel* (with optional restock) |
 | Products | Search, category and stock filters, units sold, stock meter; create/edit with a live preview |
-| Customers | Lifetime value, order count, last order; detail page with order history; owners/admins can disable accounts |
+| Customers | Lifetime value, order count, last order; detail page with order history; owners/admins can disable accounts and export the newsletter list |
 | Analytics | Revenue, orders, average order value, revenue by category, orders by status, top products and customers |
 | Team | Members (owners/admins change roles and access) and invites |
 | Account & security | Password, 2FA status, signed-in sessions |
@@ -186,8 +208,7 @@ not Radix). There is no hand-written CSS beyond the theme tokens.
 - This shadcn build has no `asChild` prop. To style a `next/link` as a button, apply
   `buttonVariants({ variant, size })` to its `className` — see `components/Header.tsx`.
 - `Button` and `Input` render in server components; `Select`, `Table` and `Label` are
-  client-only. The catalogue filter on `/` deliberately uses a native `<select>` so the form
-  still submits without JavaScript.
+  client-only. On `/shop`, categories are links and the price filter is a plain GET form, so both work without JavaScript.
 - `next.config.ts` exists mainly because the shadcn CLI needs it to detect Next.js.
 
 ## How checkout works
@@ -203,9 +224,11 @@ not Radix). There is no hand-written CSS beyond the theme tokens.
 | Method | Path | Auth |
 | --- | --- | --- |
 | POST | `/api/auth/register`, `/api/auth/login`, `/api/auth/forgot`, `/api/auth/reset` | – |
-| GET | `/api/settings` (store name, currency) | – |
+| GET | `/api/settings` (store name, currency, storefront content, shipping countries) | – |
+| POST | `/api/newsletter` | – (rate-limited) |
+| PATCH, POST | `/api/auth/me` (name), `/api/auth/password` | customer token |
 | GET | `/api/auth/me` | customer token |
-| GET | `/api/products`, `/api/products/:id`, `/api/products/categories` | – |
+| GET | `/api/products` (`q`, `category`, `sort`, `minPrice`, `maxPrice`, `inStock`, `featured`, `exclude`), `/api/products/:id`, `/api/products/categories` | – |
 | POST | `/api/checkout` | customer token |
 | GET | `/api/orders/mine`, `/api/orders/:id` | customer token |
 | POST | `/api/webhook` | Stripe signature |
@@ -224,7 +247,7 @@ not Radix). There is no hand-written CSS beyond the theme tokens.
 | GET | `/api/admin/finance/*`; PATCH `/api/admin/settings` | owner, admin |
 | GET | `/api/admin/search?q=` | admin session, setup complete |
 | GET/POST/DELETE | `/api/admin/invites[/:id]` | owner, admin |
-| GET | `/api/admin/audit` | owner, admin |
+| GET | `/api/admin/audit`, `/api/admin/customers/subscribers/export` (CSV) | owner, admin |
 
 ## Notes / next steps
 

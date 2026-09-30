@@ -23,18 +23,22 @@ async function uploadImage(file: File): Promise<string> {
   return data.url;
 }
 
-/** Ordered product images: upload or paste a URL, drag (or use the arrows) to reorder. The first is the main image. */
-export default function ImageGallery({ images, onChange }: { images: string[]; onChange: (images: string[]) => void }) {
+/**
+ * Ordered product images: upload or paste a URL, drag (or use the arrows) to reorder. The first is the main image.
+ * With `max={1}` it is a single-image picker: no ordering, and removing the image makes room for another.
+ */
+export default function ImageGallery({ images, onChange, max = MAX_IMAGES }: { images: string[]; onChange: (images: string[]) => void; max?: number }) {
+  const single = max === 1;
   const [uploading, setUploading] = useState(0);
   const [error, setError] = useState('');
   const [url, setUrl] = useState('');
   const [dragOver, setDragOver] = useState(false);
-  const room = MAX_IMAGES - images.length;
+  const room = max - images.length;
 
   async function addFiles(files: File[]) {
     setError('');
     const batch = files.filter((f) => f.type.startsWith('image/')).slice(0, room);
-    if (files.length > room) setError(`Only ${MAX_IMAGES} images per product; extra files were skipped.`);
+    if (files.length > room) setError(single ? 'Only one image here; extra files were skipped.' : `Only ${max} images per product; extra files were skipped.`);
     setUploading(batch.length);
     let next = images;
     for (const file of batch) {
@@ -84,10 +88,10 @@ export default function ImageGallery({ images, onChange }: { images: string[]; o
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
                 whileDrag={{ scale: 1.05, zIndex: 10 }}
-                className={cn('group relative size-24 cursor-grab overflow-hidden rounded-xl border bg-muted active:cursor-grabbing', i === 0 && 'ring-2 ring-primary')}
+                className={cn('group relative size-24 cursor-grab overflow-hidden rounded-xl border bg-muted active:cursor-grabbing', i === 0 && !single && 'ring-2 ring-primary')}
               >
                 <img src={src} alt={`Image ${i + 1}`} className="size-full object-cover" draggable={false} />
-                {i === 0 && (
+                {i === 0 && !single && (
                   <span className="absolute top-1 left-1 flex items-center gap-0.5 rounded-md bg-primary px-1 text-[10px] font-medium text-primary-foreground">
                     <Star className="size-2.5 fill-current" /> Main
                   </span>
@@ -100,7 +104,7 @@ export default function ImageGallery({ images, onChange }: { images: string[]; o
                 >
                   <X className="size-3.5" />
                 </button>
-                <div className="absolute inset-x-1 bottom-1 flex justify-between opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                <div hidden={single} className="absolute inset-x-1 bottom-1 flex justify-between opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                   <button
                     type="button"
                     disabled={i === 0}
@@ -140,12 +144,12 @@ export default function ImageGallery({ images, onChange }: { images: string[]; o
           )}
         >
           {uploading > 0 ? <Loader2 className="size-6 animate-spin text-muted-foreground" /> : <ImagePlus className="size-6 text-muted-foreground" />}
-          <span className="font-medium">{uploading > 0 ? `Uploading ${uploading}…` : 'Drop images here or click to upload'}</span>
-          <span className="text-xs text-muted-foreground">JPEG, PNG, WebP or GIF, up to 5 MB each · {room} more allowed</span>
+          <span className="font-medium">{uploading > 0 ? `Uploading ${uploading}…` : single ? 'Drop an image here or click to upload' : 'Drop images here or click to upload'}</span>
+          <span className="text-xs text-muted-foreground">{single ? 'JPEG, PNG, WebP or GIF, up to 5 MB' : `JPEG, PNG, WebP or GIF, up to 5 MB each · ${room} more allowed`}</span>
           <input
             type="file"
             accept={ACCEPT}
-            multiple
+            multiple={!single}
             className="sr-only"
             onChange={(e) => {
               if (e.target.files) void addFiles([...e.target.files]);

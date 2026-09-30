@@ -6,7 +6,7 @@ Where the app is today, and what it takes to get to a polished storefront plus a
 
 | Area | Today | Gap |
 | --- | --- | --- |
-| Landing (`client/app/page.tsx`) | Heading, search bar and a product grid | No hero, no featured or category sections, no motion. The catalogue *is* the landing page. |
+| Landing (`client/app/page.tsx`) | Heading, search bar and a product grid | No hero, no featured or category sections, no motion. The catalogue *is* the landing page. *(Fixed in Phase 3.)* |
 | Auth | One login for everyone. The JWT sits in `localStorage` for 7 days, and admin is a boolean `isAdmin` on `User`. | An admin is just a customer with a flag. The admin session is the shopping session, it can't be revoked, and any XSS can read the token. |
 | Admin gating | `/admin` is a client component that hides itself when `!user.isAdmin`. The API checks `adminOnly`. | The page shell still ships to every visitor, and nothing is enforced at the route level. The seed also creates `admin@example.com / admin12345`. |
 | Admin UI (`client/app/admin/page.tsx`) | A single page with a product form, a product table and an orders table capped at 200 | No layout or navigation, no user management, no finances, no pagination, search, order detail, refunds or audit trail. |
@@ -111,33 +111,34 @@ A dedicated shell: sidebar navigation, a top bar with ⌘K search across orders,
 
 ---
 
-## Phase 3: Storefront & landing page redesign (≈1–1.5 weeks)
+## Phase 3: Storefront & landing page redesign (≈1–1.5 weeks) · ✅ done
 
-Can run in parallel with Phase 2 once Phase 1's model changes (`featured`, `Category`) land.
+*Built Sep 2026. Deviations from the plan are noted in italics.*
 
 ### Structure
-- [ ] Move the catalogue from `/` to `/shop`, keeping the search, filters and pagination that exist today, and add price and sort filters.
-- [ ] Rebuild `/` as a landing page with these sections:
-  1. **Hero**: a full-bleed image or gradient, a headline, a subcopy line and two CTAs (Shop now, Browse categories). Use a staggered fade-and-rise entrance with a subtle parallax or ken-burns effect on the image.
-  2. **Trust bar**: free shipping, secure checkout, easy returns.
-  3. **Shop by category**: image tiles from the `Category` model, with a hover zoom and overlay.
-  4. **Featured products**: products flagged `featured`, as a carousel (embla via shadcn `carousel`) or grid.
-  5. **Promo or editorial split section**: image plus copy, revealed on scroll.
-  6. **New arrivals**: the latest 8 products.
-  7. **Testimonials or social proof.**
-  8. **Newsletter signup and a proper footer**: links, socials, legal.
-- [ ] Improve the header: logo, category menu, search, cart drawer (a slide-over instead of navigating to `/cart`), and a user menu.
+- [x] Catalogue moved from `/` to `/shop`: category, search, price range, in-stock and sort (newest, price, name) filters as removable chips, and numbered pagination. Filters sit in a sidebar on desktop and a collapsible panel on mobile.
+- [x] `/` rebuilt as a landing page:
+  1. **Hero**: gradient panel, headline, subcopy, two CTAs, staggered entrance, scroll parallax and a ken-burns main image. *A collage of featured product photos instead of a stock image, so it always shows real products.*
+  2. **Trust bar**: *only claims the store can back up* (Stripe checkout, the real shipping-country count, order tracking, the support email).
+  3. **Shop by category**: bento image tiles with hover zoom; a category without its own image uses its first product's.
+  4. **Featured products**: *a scroll-snap rail with arrow buttons instead of embla* (no extra dependency).
+  5. **Promo split section**, revealed on scroll.
+  6. **New arrivals**: the latest 8.
+  7. **Testimonials.** *Hidden until the store adds real quotes; nothing is invented.*
+  8. **Newsletter signup** (`POST /api/newsletter`, export from Customers) and a full footer with category links, socials and the support email.
+- [x] *Landing content is editable in **Settings → Storefront**: announcement bar, hero eyebrow/title/subtitle, promo (with image upload), up to 6 testimonials and social links. Empty sections hide themselves.*
+- [x] Header: announcement bar, sticky header with scroll shadow, categories menu, search, account menu, animated cart badge, **cart drawer**, and a mobile menu (Escape closes it).
 
 ### Motion
-- [ ] Add **`motion`** (Framer Motion) for scroll-reveal (`whileInView`), staggered grids and page transitions. `tw-animate-css` is already installed for simple enter/exit effects.
-- [ ] Add micro-interactions: add-to-cart feedback that animates the cart badge, card hover lift, and skeleton shimmer while loading.
-- [ ] Respect `prefers-reduced-motion` everywhere.
-- [ ] Performance budget: use `next/image` with proper sizes, a priority-loaded hero image, and aim for LCP under 2.5 s. Animations should use only `transform` and `opacity`.
+- [x] `motion` for scroll reveal, staggered grids and a page fade between storefront routes.
+- [x] Micro-interactions: add-to-cart check animation and cart badge bounce, card hover lift with a second-image crossfade, skeleton shimmer.
+- [x] `prefers-reduced-motion` respected: `MotionConfig reducedMotion="user"`, and the CSS keyframes only run under `no-preference`.
+- [x] `next/image` with sizes (AVIF/WebP) and priority hero/product images. *Hosts are allow-listed (picsum, the API host, `NEXT_PUBLIC_IMAGE_HOSTS`); images served from localhost fall back to a plain `<img>`.*
 
 ### Product page & polish
-- [ ] Product page: image gallery, related products, stock indicator, breadcrumbs.
-- [ ] Customer account area (`/account`): profile, password change, order detail with tracking.
-- [ ] Empty, loading and error states for every page, and SEO metadata and Open Graph images per product.
+- [x] Product page: gallery, breadcrumbs, savings vs compare-at price, stock indicator ("Only N left"), quantity stepper, related products, JSON-LD.
+- [x] Customer account (`/account`): profile name, password change (signs out other devices), order list, and order detail with a progress tracker, tracking link and address. *`/orders` redirects here.*
+- [x] Loading, error and 404 states; per-page metadata, product Open Graph images, a generated default share image, `robots.txt` and `sitemap.xml` (set `NEXT_PUBLIC_SITE_URL`).
 
 ---
 
