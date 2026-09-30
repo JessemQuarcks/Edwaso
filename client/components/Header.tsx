@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
 import { ChevronDown, LogOut, Menu, Package, Search, ShoppingBag, User, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { api } from '@/lib/api';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -125,6 +126,48 @@ function AccountMenu() {
   );
 }
 
+/** Orders, next to the cart. The badge counts orders still on their way. */
+function OrdersButton() {
+  const { user, ready } = useAuth();
+  const pathname = usePathname();
+  const [active, setActive] = useState(0);
+
+  useEffect(() => {
+    if (!user) return setActive(0);
+    let live = true;
+    api<{ active: number }>('/orders/mine/summary', { auth: true })
+      .then((d) => live && setActive(d.active))
+      .catch(() => undefined); // just a badge
+    return () => {
+      live = false;
+    };
+  }, [user, pathname]);
+
+  const href = user || !ready ? '/account/orders' : '/login?next=/account/orders';
+  return (
+    <Link
+      href={href}
+      className={buttonVariants({ variant: 'ghost', size: 'sm', className: 'relative' })}
+      aria-label={active ? `Orders, ${active} on the way` : 'Orders'}
+    >
+      <Package />
+      <span className="hidden sm:inline">Orders</span>
+      <AnimatePresence>
+        {active > 0 && (
+          <motion.span
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            exit={{ scale: 0 }}
+            className="flex h-5 min-w-5 items-center justify-center rounded-full bg-foreground px-1.5 text-[11px] font-semibold text-background tabular-nums"
+          >
+            {active}
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </Link>
+  );
+}
+
 function CartButton() {
   const { count, bump, openDrawer } = useCart();
   return (
@@ -192,7 +235,7 @@ export default function Header({ categories }: { categories: CategoryInfo[] }) {
     <>
       <AnimatePresence initial={false}>
         {storefront.announcement && !dismissed && (
-          <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden bg-foreground text-background">
+          <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden bg-foreground text-background print:hidden">
             <div className="relative mx-auto flex max-w-7xl items-center justify-center px-10 py-2 text-center text-xs font-medium sm:text-sm">
               {storefront.announcement}
               <button type="button" onClick={() => setDismissed(true)} className="absolute right-3 rounded p-1 opacity-70 hover:opacity-100" aria-label="Dismiss announcement">
@@ -205,7 +248,7 @@ export default function Header({ categories }: { categories: CategoryInfo[] }) {
 
       <header
         className={cn(
-          'sticky top-0 z-40 w-full border-b border-transparent transition-[background-color,border-color,box-shadow] duration-300',
+          'sticky top-0 z-40 w-full border-b border-transparent transition-[background-color,border-color,box-shadow] duration-300 print:hidden',
           scrolled ? 'border-border bg-background/85 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/70' : 'bg-background'
         )}
       >
@@ -237,6 +280,7 @@ export default function Header({ categories }: { categories: CategoryInfo[] }) {
             </Link>
             <ThemeToggle />
             <AccountMenu />
+            <OrdersButton />
             <CartButton />
           </div>
         </div>
@@ -270,6 +314,9 @@ export default function Header({ categories }: { categories: CategoryInfo[] }) {
                 </Link>
                 <Link href="/shop" className="rounded-lg px-3 py-2 font-medium hover:bg-muted">
                   Shop all
+                </Link>
+                <Link href="/account/orders" className="rounded-lg px-3 py-2 font-medium hover:bg-muted">
+                  Orders &amp; tracking
                 </Link>
                 <Link href="/account" className="rounded-lg px-3 py-2 font-medium hover:bg-muted">
                   My account

@@ -112,7 +112,7 @@ export default function AccountPage() {
                   </span>
                 </span>
                 <span className="flex items-center gap-3">
-                  <OrderStatusBadge status={o.status} />
+                  <OrderStatusBadge status={o.status} customer />
                   <span className="font-semibold tabular-nums">{formatPrice(o.total)}</span>
                 </span>
               </Link>

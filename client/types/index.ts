@@ -59,6 +59,9 @@ export interface Order {
   statusHistory?: { status: OrderStatus; at: string }[];
   fulfillment?: { carrier?: string; trackingNumber?: string; trackingUrl?: string; shippedAt?: string; deliveredAt?: string };
   shippingAddress?: { name?: string; line1?: string; line2?: string; city?: string; state?: string; postalCode?: string; country?: string };
+  refunds?: { amount: number; createdAt: string; status?: string }[];
+  /** An unpaid checkout that can still be finished: Stripe's payment page. */
+  checkoutUrl?: string;
 }
 
 export interface CartItem {

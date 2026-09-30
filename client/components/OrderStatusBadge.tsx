@@ -33,20 +33,33 @@ export const STATUS_LABEL: Record<OrderStatus, string> = {
   refunded: 'Refunded',
 };
 
+/** The storefront speaks to the customer: "Confirmed" rather than "Paid", and so on. */
+const CUSTOMER_LABEL: Partial<Record<OrderStatus, string>> = {
+  pending: 'Awaiting payment',
+  paid: 'Confirmed',
+  processing: 'Preparing',
+};
+
 export default function OrderStatusBadge({
   status,
   partiallyRefunded = false,
+  customer = false,
   className,
 }: {
   status: OrderStatus;
+  /** Use customer-facing wording. */
+  customer?: boolean;
   /** Adds a "part refunded" marker next to a sale that was partly refunded. */
   partiallyRefunded?: boolean;
   className?: string;
 }) {
   return (
     <span className="inline-flex items-center gap-1">
-      <Badge variant={STATUS_VARIANT[status]} className={cn(STATUS_CLASS[status], className)}>
-        {STATUS_LABEL[status]}
+      <Badge
+        variant={STATUS_VARIANT[status]}
+        className={cn(STATUS_CLASS[status], customer && status === 'pending' && 'border-amber-300 text-amber-800 dark:border-amber-800 dark:text-amber-300', className)}
+      >
+        {(customer && CUSTOMER_LABEL[status]) || STATUS_LABEL[status]}
       </Badge>
       {partiallyRefunded && (
         <Badge variant="outline" className="text-muted-foreground">
