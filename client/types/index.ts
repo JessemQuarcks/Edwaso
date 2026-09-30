@@ -53,6 +53,12 @@ export interface Order {
   paidAt?: string;
   createdAt: string;
   updatedAt: string;
+  // Present on the customer's own orders (see server/src/routes/orders.ts).
+  currency?: string;
+  amountRefunded?: number;
+  statusHistory?: { status: OrderStatus; at: string }[];
+  fulfillment?: { carrier?: string; trackingNumber?: string; trackingUrl?: string; shippedAt?: string; deliveredAt?: string };
+  shippingAddress?: { name?: string; line1?: string; line2?: string; city?: string; state?: string; postalCode?: string; country?: string };
 }
 
 export interface CartItem {
@@ -79,16 +85,33 @@ export interface CategoryInfo {
   slug: string;
   name: string;
   image: string;
+  description?: string;
+  /** Products on sale in this category. */
+  count?: number;
 }
 export interface CategoriesResponse {
   /** Slugs. */
   categories: string[];
   items: CategoryInfo[];
 }
+/** Landing-page content edited under Admin → Settings → Storefront. */
+export interface StorefrontContent {
+  announcement: string;
+  heroEyebrow: string;
+  heroTitle: string;
+  heroSubtitle: string;
+  promo: { title: string; body: string; ctaLabel: string; ctaHref: string; image: string };
+  testimonials: { quote: string; author: string; detail: string }[];
+  social: { instagram: string; facebook: string; x: string; tiktok: string };
+}
+
 export interface StoreInfo {
   storeName: string;
   currency: string;
   supportEmail: string;
+  storefront: StorefrontContent;
+  /** ISO country codes checkout ships to. */
+  shippingCountries: string[];
 }
 export interface AuthResponse {
   token: string;

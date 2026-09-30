@@ -1,136 +1,49 @@
-import Link from 'next/link';
-import { AlertCircle, Search } from 'lucide-react';
-import { api, errorMessage } from '@/lib/api';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button, buttonVariants } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import ProductCard from '@/components/ProductCard';
-import type { CategoriesResponse, ProductsResponse } from '@/types';
+import { api } from '@/lib/api';
+import { getCategories, getStoreInfo } from '@/lib/store';
+import Hero from '@/components/store/landing/Hero';
+import ProductRail from '@/components/store/landing/ProductRail';
+import { CategoryTiles, NewsletterBand, ProductGrid, Promo, Testimonials, TrustBar } from '@/components/store/landing/Sections';
+import type { ProductsResponse } from '@/types';
 
-interface HomeSearchParams {
-  q?: string;
-  category?: string;
-  page?: string;
+// Rebuilt at most once a minute; product and content edits show up within that.
+export const revalidate = 60;
+
+async function products(query: string) {
+  try {
+    return (await api<ProductsResponse>(`/products?${query}`, { next: { revalidate: 60 } })).products;
+  } catch {
+    return []; // The page still renders its static sections if the API is briefly down.
+  }
 }
 
-// Native <select> so the filter form still submits without JavaScript.
-// Styled to match the shadcn select trigger.
-const SELECT_CLASS =
-  'h-9 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 sm:w-48';
+export default async function Home() {
+  const [store, categories, featured, newest] = await Promise.all([
+    getStoreInfo(),
+    getCategories(),
+    products('featured=true&limit=10'),
+    products('sort=newest&limit=8'),
+  ]);
+  const { storefront } = store;
 
-export default async function Home({ searchParams }: { searchParams: Promise<HomeSearchParams> }) {
-  const { q = '', category = '', page = '1' } = await searchParams;
-
-  const query = new URLSearchParams({ page });
-  if (q) query.set('q', q);
-  if (category) query.set('category', category);
-
-  let data: ProductsResponse;
-  let categories: string[];
-  try {
-    const [products, cats] = await Promise.all([
-      api<ProductsResponse>(`/products?${query}`),
-      api<CategoriesResponse>('/products/categories'),
-    ]);
-    data = products;
-    categories = cats.categories;
-  } catch (err) {
-    return (
-      <Alert variant="destructive">
-        <AlertCircle />
-        <AlertTitle>Could not load products</AlertTitle>
-        <AlertDescription>{errorMessage(err)} — is the API running on port 5000?</AlertDescription>
-      </Alert>
-    );
-  }
-
-  const pageLink = (n: number): string => {
-    const params = new URLSearchParams({ page: String(n) });
-    if (q) params.set('q', q);
-    if (category) params.set('category', category);
-    return `/?${params}`;
-  };
+  // The hero collage prefers featured products with photos, topped up from the newest.
+  const collage = [...featured, ...newest.filter((p) => !featured.some((f) => f._id === p._id))].filter((p) => p.image).slice(0, 3);
+  const countries = store.shippingCountries.length;
+  const trustLine = ['Secure checkout by Stripe', countries ? `Ships to ${countries} ${countries === 1 ? 'country' : 'countries'}` : '', 'Easy order tracking']
+    .filter(Boolean)
+    .join(' · ');
 
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">All products</h1>
-        <p className="text-sm text-muted-foreground">
-          {data.total} {data.total === 1 ? 'item' : 'items'}
-          {category && ` in ${category}`}
-          {q && ` matching “${q}”`}
-        </p>
-      </div>
-
-      <form action="/" className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            name="q"
-            defaultValue={q}
-            placeholder="Search products…"
-            className="h-9 pl-8"
-          />
-        </div>
-        <select name="category" defaultValue={category} className={SELECT_CLASS}>
-          <option value="">All categories</option>
-          {categories.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        <Button type="submit" size="lg">
-          Search
-        </Button>
-      </form>
-
-      {data.products.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center">
-          <p className="text-sm text-muted-foreground">No products match your search.</p>
-          <Link href="/" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            Clear filters
-          </Link>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {data.products.map((p) => (
-            <ProductCard key={p._id} product={p} />
-          ))}
-        </div>
-      )}
-
-      {data.pages > 1 && (
-        <div className="flex items-center justify-center gap-4">
-          {data.page > 1 ? (
-            <Link
-              href={pageLink(data.page - 1)}
-              className={buttonVariants({ variant: 'outline', size: 'sm' })}
-            >
-              Previous
-            </Link>
-          ) : (
-            <Button variant="outline" size="sm" disabled>
-              Previous
-            </Button>
-          )}
-          <span className="text-sm text-muted-foreground tabular-nums">
-            Page {data.page} of {data.pages}
-          </span>
-          {data.page < data.pages ? (
-            <Link
-              href={pageLink(data.page + 1)}
-              className={buttonVariants({ variant: 'outline', size: 'sm' })}
-            >
-              Next
-            </Link>
-          ) : (
-            <Button variant="outline" size="sm" disabled>
-              Next
-            </Button>
-          )}
-        </div>
-      )}
-    </div>
+    <>
+      <Hero eyebrow={storefront.heroEyebrow} title={storefront.heroTitle} subtitle={storefront.heroSubtitle} products={collage} trustLine={trustLine} />
+      <TrustBar shippingCountries={countries} supportEmail={store.supportEmail} />
+      <CategoryTiles categories={categories} />
+      {featured.length > 0 ? (
+        <ProductRail products={featured} eyebrow="Featured" title="Our favourites right now" href="/shop" />
+      ) : null}
+      <Promo promo={storefront.promo} fallbackImage={collage[0]?.image} />
+      <ProductGrid products={newest} eyebrow="Just in" title="New arrivals" href="/shop?sort=newest" />
+      <Testimonials items={storefront.testimonials} />
+      <NewsletterBand storeName={store.storeName} />
+    </>
   );
 }
