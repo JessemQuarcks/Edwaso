@@ -41,3 +41,13 @@ export async function getInvite(token: string): Promise<InviteInfo | null> {
   if (!res.ok) throw new Error(`Admin API responded ${res.status}`);
   return (await res.json()) as InviteInfo;
 }
+
+/** GET an admin endpoint from a server component with the caller's session, or null on 401/403/404. */
+export async function adminServerGet<T>(path: string): Promise<T | null> {
+  const cookie = await adminCookieHeader();
+  if (!cookie) return null;
+  const res = await fetch(`${API_ORIGIN}/api/admin${path}`, { headers: { Cookie: cookie }, cache: 'no-store' });
+  if ([401, 403, 404].includes(res.status)) return null;
+  if (!res.ok) throw new Error(`Admin API responded ${res.status}`);
+  return (await res.json()) as T;
+}

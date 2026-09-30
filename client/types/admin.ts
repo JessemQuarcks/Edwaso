@@ -169,12 +169,58 @@ export interface ShippingAddress {
   country?: string;
 }
 
-export interface AdminOrder extends Omit<Order, 'user'> {
+export interface AdminOrderItem extends OrderItem {
+  sku?: string;
+  costPrice?: number;
+}
+
+export interface Fulfillment {
+  carrier?: string;
+  trackingNumber?: string;
+  trackingUrl?: string;
+  shippedAt?: string;
+  deliveredAt?: string;
+}
+
+export interface PaymentInfo {
+  paymentIntentId?: string;
+  chargeId?: string;
+  amountSubtotal?: number;
+  amountTax?: number;
+  amountShipping?: number;
+  amountTotal?: number;
+  fee?: number;
+  net?: number;
+}
+
+export interface RefundInfo {
+  refundId: string;
+  amount: number;
+  reason?: string;
+  status: string;
+  createdAt: string;
+  by?: { _id: string; name: string; email: string };
+}
+
+export interface OrderNote {
+  _id: string;
+  body: string;
+  author: { _id: string; name: string; email: string } | null;
+  createdAt: string;
+}
+
+export interface AdminOrder extends Omit<Order, 'user' | 'items'> {
   user: { _id: string; name: string; email: string; createdAt?: string } | null;
-  items: OrderItem[];
+  items: AdminOrderItem[];
+  currency: string;
   stripeSessionId?: string;
   shippingAddress?: ShippingAddress;
   statusHistory: StatusChange[];
+  fulfillment?: Fulfillment;
+  payment?: PaymentInfo;
+  amountRefunded: number;
+  refunds: RefundInfo[];
+  notes?: OrderNote[];
 }
 
 export type OrderCounts = Record<OrderStatus | 'all', number>;
@@ -190,11 +236,14 @@ export interface OrdersListResponse {
 export interface OrderDetailResponse {
   order: AdminOrder;
   allowedTransitions: OrderStatus[];
+  /** Cents still refundable through Stripe; 0 when refunds aren't possible. */
+  refundable: number;
 }
 
 // ---- Products ----
 
 export interface AdminProduct extends Product {
+  costPrice?: number;
   sold: number;
 }
 
@@ -203,8 +252,152 @@ export interface ProductsListResponse {
   page: number;
   pages: number;
   total: number;
-  counts: { all: number; low: number; out: number };
+  counts: { all: number; low: number; out: number; archived: number };
   lowStockThreshold: number;
+}
+
+export type StockReason = 'sale' | 'restock' | 'return' | 'cancellation' | 'correction' | 'damaged' | 'manual' | 'import';
+
+export interface StockEntry {
+  _id: string;
+  delta: number;
+  stockAfter: number;
+  reason: StockReason;
+  note?: string;
+  order?: { _id: string } | null;
+  by?: { _id: string; name: string } | null;
+  createdAt: string;
+}
+
+export interface StockHistoryResponse {
+  entries: StockEntry[];
+  page: number;
+  pages: number;
+  total: number;
+}
+
+export interface ImportSummary {
+  rows: number;
+  create: number;
+  update: number;
+  errors: { row: number; message: string }[];
+  applied: boolean;
+  message?: string;
+}
+
+export interface Category {
+  _id: string;
+  name: string;
+  slug: string;
+  description: string;
+  image: string;
+  sortOrder: number;
+  productCount: number;
+}
+
+// ---- Settings ----
+
+export interface StoreSettings {
+  storeName: string;
+  supportEmail: string;
+  currency: string;
+  shippingCountries: string[];
+  automaticTax: boolean;
+  lowStockThreshold: number;
+}
+
+export interface SettingsResponse {
+  settings: StoreSettings;
+  currencyLocked: boolean;
+}
+
+// ---- Finance ----
+
+export interface FinancePoint {
+  key: string;
+  start: string;
+  gross: number;
+  refunds: number;
+  fees: number;
+  net: number;
+}
+
+export interface FinanceSummary {
+  range: RangeInfo;
+  kpis: { gross: Kpi; fees: Kpi; refunds: Kpi; net: Kpi };
+  refundRate: number | null;
+  feeRate: number | null;
+  margin: { grossProfit: number; marginPercent: number | null; coveragePercent: number | null };
+  series: FinancePoint[];
+}
+
+export interface LedgerEntry {
+  _id: string;
+  type: 'payment' | 'refund';
+  order: { _id: string; total: number; status: OrderStatus; user: { _id: string; name: string; email: string } | null } | null;
+  stripeId: string;
+  currency: string;
+  amount: number;
+  fee: number;
+  net: number;
+  occurredAt: string;
+}
+
+export interface LedgerResponse {
+  transactions: LedgerEntry[];
+  page: number;
+  pages: number;
+  total: number;
+}
+
+export interface Payout {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  arrivalDate: string;
+  createdAt: string;
+  method: string;
+  description: string | null;
+}
+
+export interface PayoutDetail {
+  payout: { id: string; amount: number; currency: string; status: string; arrivalDate: string };
+  transactions: { id: string; type: string; amount: number; fee: number; net: number; createdAt: string; orderId: string | null; matched: boolean }[];
+  matched: number;
+  unmatched: number;
+  totalNet: number;
+}
+
+// ---- Audit ----
+
+export interface AuditEntry {
+  _id: string;
+  actorEmail?: string;
+  action: string;
+  entity?: string;
+  entityId?: string;
+  before?: unknown;
+  after?: unknown;
+  meta?: Record<string, unknown>;
+  ip?: string;
+  createdAt: string;
+}
+
+export interface AuditResponse {
+  entries: AuditEntry[];
+  page: number;
+  pages: number;
+  total: number;
+  actions: string[];
+}
+
+// ---- Search ----
+
+export interface SearchResponse {
+  orders: { _id: string; total: number; status: OrderStatus; createdAt: string; user: { _id: string; name: string } | null }[];
+  products: { _id: string; name: string; sku?: string; image: string; status: string; price: number }[];
+  customers: { _id: string; name: string; email: string }[];
 }
 
 // ---- Customers ----
@@ -225,6 +418,23 @@ export interface CustomersListResponse {
   page: number;
   pages: number;
   total: number;
+}
+
+export interface CustomerNote {
+  _id: string;
+  body: string;
+  author: { _id: string; name: string; email: string } | null;
+  createdAt: string;
+}
+
+export interface ActivityEvent {
+  at: string;
+  kind: 'account' | 'order' | 'email' | 'admin';
+  title: string;
+  detail?: string;
+  orderId?: string;
+  actor?: string;
+  amount?: number;
 }
 
 export interface CustomerDetailResponse {

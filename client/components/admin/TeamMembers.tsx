@@ -1,13 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'motion/react';
-import { Ban, CircleCheck, MoreHorizontal, ShieldAlert, ShieldCheck, UserCog } from 'lucide-react';
+import { Ban, CircleCheck, Laptop, Loader2, LogOut, MonitorSmartphone, MoreHorizontal, ShieldAlert, ShieldCheck, UserCog } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { errorMessage } from '@/lib/api';
 import { adminApi } from '@/lib/admin-api';
 import { useAdminQuery } from '@/lib/use-admin-query';
 import { timeAgo } from '@/lib/admin-format';
 import { Badge } from '@/components/ui/badge';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   DropdownMenu,
@@ -44,6 +46,7 @@ export default function TeamMembers() {
   }
 
   const manageable = MANAGES[me.role] ?? [];
+  const [sessionsFor, setSessionsFor] = useState<TeamMember | null>(null);
 
   return (
     <Card className="gap-0 py-0">
@@ -140,7 +143,11 @@ export default function TeamMembers() {
                                 Make staff
                               </DropdownMenuItem>
                             )}
-                            {me.role === 'owner' && <DropdownMenuSeparator />}
+                            <DropdownMenuItem onClick={() => setSessionsFor(m)}>
+                              <MonitorSmartphone />
+                              Sessions
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             {m.status === 'active' ? (
                               <DropdownMenuItem
                                 variant="destructive"
@@ -170,6 +177,72 @@ export default function TeamMembers() {
           </Table>
         </div>
       )}
+      <MemberSessions member={sessionsFor} onClose={() => setSessionsFor(null)} />
     </Card>
+  );
+}
+
+interface MemberSession {
+  id: string;
+  ip?: string;
+  userAgent?: string;
+  createdAt: string;
+  lastSeenAt: string;
+}
+
+function MemberSessions({ member, onClose }: { member: TeamMember | null; onClose: () => void }) {
+  const toast = useToast();
+  const { data, error, refetch } = useAdminQuery<{ sessions: MemberSession[] }>(member ? `/team/${member._id}/sessions` : null);
+  const [busy, setBusy] = useState(false);
+
+  async function signOutAll() {
+    if (!member) return;
+    setBusy(true);
+    try {
+      const res = await adminApi<{ revoked: number }>(`/team/${member._id}/sessions`, { method: 'DELETE' });
+      toast(`Signed out ${res.revoked} ${res.revoked === 1 ? 'session' : 'sessions'}`, { description: member.name });
+      refetch();
+    } catch (err) {
+      toast('Couldn’t sign them out', { description: errorMessage(err), variant: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={member !== null} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{member?.name}’s sessions</DialogTitle>
+          <DialogDescription>Devices signed in to the admin console right now.</DialogDescription>
+        </DialogHeader>
+        <FormError message={error} />
+        {!data ? (
+          <Skeleton className="h-16 rounded-lg" />
+        ) : data.sessions.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">Not signed in anywhere.</p>
+        ) : (
+          <ul className="flex flex-col divide-y text-sm">
+            {data.sessions.map((s) => (
+              <li key={s.id} className="flex items-center gap-3 py-2.5">
+                <Laptop className="size-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0">
+                  <span className="block truncate">{s.userAgent ?? 'Unknown device'}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {s.ip ?? 'Unknown IP'} · active {timeAgo(s.lastSeenAt)}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <DialogFooter>
+          <Button variant="destructive" onClick={() => void signOutAll()} disabled={busy || !data?.sessions.length}>
+            {busy ? <Loader2 className="animate-spin" /> : <LogOut />}
+            Sign out everywhere
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

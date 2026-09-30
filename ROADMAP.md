@@ -64,53 +64,50 @@ Goal: an admin session is a separate thing from a customer session. Logging in o
 
 ---
 
-## Phase 2: Admin console (≈2–3 weeks) · 🟡 in progress
+## Phase 2: Admin console (≈2–3 weeks) · ✅ done
 
-*Status (Sep 2026): the console shell, dashboard, orders, products, customers, analytics and team pages are built
-(design inspired by the "Admin E-Commerce Dashboard" concept). Unchecked items below remain.*
+*Built Sep 2026. Deviations from the plan are noted in italics.*
 
-A dedicated shell: sidebar navigation (shadcn `sidebar`; the tokens already exist), top bar with a global search, and breadcrumbs. Every list is server-paginated, sortable, filterable and exportable to CSV.
+A dedicated shell: sidebar navigation, a top bar with ⌘K search across orders, products, customers and pages, and back links on detail pages (*instead of breadcrumbs*). Lists are server-paginated, sortable, filterable and exportable to CSV.
 
 ### 2a. Dashboard (`/admin`)
-- [x] KPI tiles with change vs the previous period, over a selectable range (24h / 7d / 30d / 12m / all). *Refunds wait for 2e.*
-- [x] A revenue-over-time chart (recharts), this period vs previous, and a best-sellers carousel.
-- [x] Action queues: orders awaiting shipment and low-stock products, plus a notifications bell. *Failed payments wait for 2e.*
-- [x] Backed by `GET /api/admin/stats/overview` and `/stats/analytics`, using Mongo aggregation pipelines bucketed in the admin's timezone.
+- [x] KPI tiles with change vs the previous period, over a selectable range (24h / 7d / 30d / 12m / all).
+- [x] Revenue this period vs previous, and a best-sellers carousel. Revenue is net of refunds.
+- [x] Action queues: orders to fulfil and low-stock products, plus a notifications bell.
+- [x] Backed by `/api/admin/stats/*`, bucketed in the admin's timezone.
 
 ### 2b. Products (`/admin/products`)
-- [x] A table with search, category and stock filters, sorting and units sold. *Bulk actions still to do.*
-- [ ] A dedicated create/edit page instead of the inline form (*done, with a live preview; the rest of this item is not*): rich description, **image upload** (Cloudinary or S3 presigned URLs) with multiple images and reordering, SKU, compare-at price, cost price (needed for margin reporting), `featured` flag (feeds the landing page), and `status: draft | active | archived`.
-- [ ] Replace hard delete with archive. Orders reference products, so archived products stay resolvable.
-- [ ] Categories management (`/admin/categories`): name, slug, image and sort order. This turns the free-text `category` string into a `Category` model.
-- [ ] Inventory: stock-adjustment history (a reason plus who made it), a configurable low-stock threshold, and CSV import/export.
+- [x] Table with search (name or SKU), category, visibility and stock filters, sorting, units sold, and bulk actions (publish, draft, archive, feature, change category, adjust price by %).
+- [x] Create/edit page with a live preview: **image upload** (multiple, drag to reorder), SKU, compare-at price, cost price with a margin readout, featured flag, and draft / active / archived. *Images are stored on the API server's disk behind a storage interface (`server/src/lib/storage.ts`); swap in S3 or Cloudinary for multi-server hosting. Descriptions are plain text, not rich text.*
+- [x] Archive instead of delete: products that have sold can only be archived; unsold ones can still be deleted.
+- [x] Categories (`/admin/categories`): name, slug, image, sort order. Renaming a slug moves its products; deleting requires moving them.
+- [x] Inventory: every stock change is recorded with a reason and who made it; the low-stock threshold is a setting; products import/export as CSV (validated all-or-nothing, with a dry-run preview).
 
 ### 2c. Orders (`/admin/orders`)
-- [x] Status tabs with counts, sorting, search by order # / customer / email, CSV export. *Date-range and amount filters still to do.*
-- [x] An order detail page (`/admin/orders/[id]`): line items, customer, shipping address, payment info, and a **status timeline** (`statusHistory` on the order).
-- [ ] Expand the status model to `pending → paid → processing → shipped → delivered`, plus `cancelled` and `refunded` / `partially_refunded`.
-- [x] Enforce status transitions on the server with a state machine, so `pending → paid` is only possible from the webhook.
-- [ ] Fulfilment: carrier, tracking number and tracking URL, a printable packing slip and invoice, and email the customer on ship.
-- [x] Cancel with a restock option. *The refund itself is still done in Stripe until 2e.*
-- [ ] Internal notes on orders.
+- [x] Status tabs with counts, date-range and amount filters, search, sorting, CSV export.
+- [x] Detail page: line items, customer, shipping, payment (Stripe fee, net), refunds, **status timeline**.
+- [x] Statuses `pending → paid → processing → shipped → delivered`, plus `cancelled` and `refunded`. *A partial refund keeps the status and shows a "part refunded" badge rather than a separate status.*
+- [x] Server-enforced transitions; only the Stripe webhook marks an order paid.
+- [x] Fulfilment: carrier, tracking number and link; printable invoice and packing slip; the customer is emailed when it ships.
+- [x] Cancel with optional Stripe refund and restock.
+- [x] Internal notes.
 
-### 2d. Customers & staff (`/admin/users`)
-- [x] A customer list with search, joined date, order count and lifetime value.
-- [x] A customer detail page: profile, order history and totals. *Activity trail still to do.*
-- [ ] Actions: disable/enable the account (*done, bumps `tokenVersion`*), trigger a password-reset email, and add notes.
-- [x] A team tab: invite, change role (owner), disable/restore access. *Viewing another member's sessions still to do.*
-- [x] Guards: nobody can change their own account from the team page, and owners are only changed from the CLI.
+### 2d. Customers & staff
+- [x] Customer list with lifetime value; detail page with orders, an activity trail (account, orders, emails, staff actions) and notes.
+- [x] Actions: disable/enable, and send a password-reset email. Customers can also reset their own password from the store.
+- [x] Team: invite, change role, disable/restore, view and end a member's sessions.
+- [x] Guards: nobody changes their own account from the team page; owners only change from the CLI.
 
 ### 2e. Finances (`/admin/finance`)
-- [ ] **Store the Stripe `payment_intent` id and charge id** on the order in the webhook. This is a prerequisite for everything else here.
-- [ ] Record `amountSubtotal`, `amountTax`, `amountShipping`, `amountTotal`, and the Stripe fee (from the balance transaction), so the admin sees net revenue.
-- [ ] Refunds: full or partial from the order page via `stripe.refunds.create`, with a reason. Handle the `charge.refunded` webhook to keep the order in sync, and optionally restock.
-- [ ] A transactions ledger: every payment and refund with gross, fee and net, filterable by date and exportable to CSV for accounting.
-- [ ] Reports: revenue by day, week or month; by category and by product; gross margin (using cost price); refund rate.
-- [ ] Payouts: list Stripe payouts (`stripe.payouts.list`) and reconcile them against the ledger.
-- [ ] Settings (`/admin/settings`): store name, currency, allowed shipping countries (currently hard-coded in `checkout.ts`), tax behaviour, and low-stock threshold.
+- [x] The webhook stores the payment intent, charge, subtotal/tax/shipping and the Stripe fee (idempotently).
+- [x] Refunds, full or partial, from the order page through Stripe (idempotency keys), with a reason and optional restock. `charge.refunded` keeps refunds made in the Stripe dashboard in sync.
+- [x] Transactions ledger (payments and refunds with gross, fee, net), filterable and exportable.
+- [x] Reports: gross vs net over time, refund rate, fee rate, gross margin from cost prices (with coverage), plus revenue by category/product in Analytics.
+- [x] Payouts from Stripe, reconciled against the ledger.
+- [x] Settings (`/admin/settings`): store name, support email, currency (locked once there are orders), shipping countries, Stripe automatic tax, low-stock threshold.
 
 ### 2f. Audit log (`/admin/audit`)
-- [ ] A read-only, filterable list of every admin action (who, what, when, before and after).
+- [x] Filterable (action group, person, dates) list with before/after diffs and CSV export.
 
 ---
 

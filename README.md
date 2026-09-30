@@ -77,6 +77,10 @@ admin access, even for an account with an admin role.
 
 | Page | What it does |
 | --- | --- |
+| Categories | Names, slugs, images and order for grouping products |
+| Finance | Gross, fees, refunds and net from the Stripe ledger; margin; transactions (CSV); payouts reconciled against the ledger (owners/admins) |
+| Audit log | Every admin action, filterable, with before/after diffs and CSV export (owners/admins) |
+| Settings | Store name, support email, currency, shipping countries, Stripe automatic tax, low-stock threshold |
 | Overview (`/admin`) | Date range (24h / 7d / 30d / 12m / all), KPI tiles with change vs the previous period, sales report (revenue this vs previous period), latest transactions, best-sellers carousel, items needing attention |
 | Orders | Status tabs with counts, search by customer/email/order #, sorting, CSV export, detail page with timeline, *Mark as shipped* and *Cancel* (with optional restock) |
 | Products | Search, category and stock filters, units sold, stock meter; create/edit with a live preview |
@@ -90,6 +94,19 @@ view can be bookmarked or shared. Reports bucket by the admin's own timezone.
 
 The sidebar badge and the bell poll `/api/admin/notifications` every minute: paid orders waiting to
 ship and products at or below 5 in stock.
+
+Order detail pages have printable invoices and packing slips, refunds (owners/admins) and internal
+notes. Press **Ctrl/⌘ K** anywhere in the console to search orders, products and customers.
+
+### Images, email and money
+
+- **Product images** upload to `server/uploads/` (`UPLOAD_DIR`) and are served at `/uploads/*` with a
+  locked-down CSP. Set `PUBLIC_API_URL` to the API's public origin so image URLs work from the storefront.
+  For several API servers, implement `ImageStore` in `server/src/lib/storage.ts` against S3/Cloudinary.
+- **Email** (order shipped, password reset) is printed to the API console in development. Set
+  `RESEND_API_KEY` and `EMAIL_FROM` to send for real. Only metadata is logged (`EmailLog`), never bodies.
+- **Stripe webhook events** to enable: `checkout.session.completed`, `checkout.session.expired`,
+  `charge.refunded`. Payments are recorded with Stripe's fee in the `Transaction` ledger.
 
 ### Demo data
 
@@ -185,7 +202,8 @@ not Radix). There is no hand-written CSS beyond the theme tokens.
 
 | Method | Path | Auth |
 | --- | --- | --- |
-| POST | `/api/auth/register`, `/api/auth/login` | – |
+| POST | `/api/auth/register`, `/api/auth/login`, `/api/auth/forgot`, `/api/auth/reset` | – |
+| GET | `/api/settings` (store name, currency) | – |
 | GET | `/api/auth/me` | customer token |
 | GET | `/api/products`, `/api/products/:id`, `/api/products/categories` | – |
 | POST | `/api/checkout` | customer token |
@@ -201,6 +219,10 @@ not Radix). There is no hand-written CSS beyond the theme tokens.
 | GET | `/api/admin/orders/export` (CSV), `/api/admin/products[/:id]`, `/api/admin/customers[/:id]`, `/api/admin/notifications` | admin session, setup complete |
 | PATCH | `/api/admin/customers/:id/status` | owner, admin |
 | GET, PATCH | `/api/admin/team[/:id]` | owner, admin |
+| GET/POST/PUT/DELETE | `/api/admin/categories[/:id]`, `/api/admin/uploads/images`, products `/bulk`, `/import`, `/export`, `/:id/stock` | admin session, setup complete |
+| POST | `/api/admin/orders/:id/refunds` | owner, admin |
+| GET | `/api/admin/finance/*`; PATCH `/api/admin/settings` | owner, admin |
+| GET | `/api/admin/search?q=` | admin session, setup complete |
 | GET/POST/DELETE | `/api/admin/invites[/:id]` | owner, admin |
 | GET | `/api/admin/audit` | owner, admin |
 

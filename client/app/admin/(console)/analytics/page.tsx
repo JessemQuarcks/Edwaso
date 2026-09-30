@@ -28,12 +28,15 @@ import { EASE_OUT, Stagger, StaggerItem } from '@/components/admin/motion';
 import type { AnalyticsResponse, SeriesPoint } from '@/types/admin';
 import type { OrderStatus } from '@/types';
 
-const STATUS_ORDER: OrderStatus[] = ['paid', 'shipped', 'pending', 'cancelled'];
+const STATUS_ORDER: OrderStatus[] = ['paid', 'processing', 'shipped', 'delivered', 'pending', 'cancelled', 'refunded'];
 const STATUS_HELP: Record<OrderStatus, string> = {
   pending: 'Checkout started, not paid',
-  paid: 'Paid, waiting to ship',
-  shipped: 'On the way or delivered',
+  paid: 'Paid, not started',
+  processing: 'Being prepared',
+  shipped: 'On the way',
+  delivered: 'Delivered',
   cancelled: 'Cancelled or checkout expired',
+  refunded: 'Fully refunded',
 };
 
 export default function AnalyticsPage() {

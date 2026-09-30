@@ -16,11 +16,17 @@ import {
   Package,
   ShieldCheck,
   ShoppingBag,
+  ScrollText,
+  Search,
+  Settings,
   ShoppingCart,
+  Tags,
   Users,
   UsersRound,
+  Wallet,
   X,
 } from 'lucide-react';
+import CommandPalette from './CommandPalette';
 import { adminApi } from '@/lib/admin-api';
 import { initials } from '@/lib/admin-format';
 import { cn } from '@/lib/utils';
@@ -35,6 +41,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import ThemeToggle from '@/components/ThemeToggle';
+import { useStore } from '@/components/Providers';
 import { NotificationsBell, NotificationsProvider, useNotifications } from './AdminNotifications';
 import Toaster from './Toaster';
 import { EASE_OUT } from './motion';
@@ -64,14 +71,18 @@ const NAV: { title: string; items: NavItem[] }[] = [
       { href: '/admin', label: 'Overview', icon: LayoutGrid },
       { href: '/admin/orders', label: 'Orders', icon: ShoppingCart, badge: 'awaitingShipment' },
       { href: '/admin/products', label: 'Products', icon: Package },
+      { href: '/admin/categories', label: 'Categories', icon: Tags },
       { href: '/admin/customers', label: 'Customers', icon: Users },
       { href: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
+      { href: '/admin/finance', label: 'Finance', icon: Wallet, roles: ['owner', 'admin'] },
     ],
   },
   {
     title: 'Store',
     items: [
       { href: '/admin/team', label: 'Team', icon: UsersRound, roles: ['owner', 'admin'] },
+      { href: '/admin/audit', label: 'Audit log', icon: ScrollText, roles: ['owner', 'admin'] },
+      { href: '/admin/settings', label: 'Settings', icon: Settings },
       { href: '/admin/security', label: 'Account & security', icon: ShieldCheck },
     ],
   },
@@ -81,6 +92,10 @@ const NAV: { title: string; items: NavItem[] }[] = [
 const SECTIONS: Record<string, { title: string; description: string }> = {
   orders: { title: 'Orders', description: 'Track, fulfil and export orders.' },
   products: { title: 'Products', description: 'Your catalog, prices and stock.' },
+  categories: { title: 'Categories', description: 'How products are grouped on the store.' },
+  finance: { title: 'Finance', description: 'Payments, fees, refunds and payouts.' },
+  audit: { title: 'Audit log', description: 'Every change made in the admin console.' },
+  settings: { title: 'Settings', description: 'Store details, checkout and inventory.' },
   customers: { title: 'Customers', description: 'Everyone who shops with you.' },
   analytics: { title: 'Analytics', description: 'How the store is performing over time.' },
   team: { title: 'Team', description: 'Staff accounts and invites.' },
@@ -93,12 +108,18 @@ const isActive = (pathname: string, href: string) =>
 const COLLAPSED_KEY = 'admin-sidebar-collapsed';
 
 function Brand({ collapsed = false }: { collapsed?: boolean }) {
+  const { storeName } = useStore();
   return (
     <Link href="/admin" className="flex items-center gap-2.5 overflow-hidden">
       <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
         <ShoppingBag className="size-4" />
       </span>
-      {!collapsed && <span className="truncate text-base font-semibold tracking-tight">Shop Admin</span>}
+      {!collapsed && (
+        <span className="min-w-0 leading-tight">
+          <span className="block truncate text-base font-semibold tracking-tight">{storeName}</span>
+          <span className="block text-xs text-muted-foreground">Admin</span>
+        </span>
+      )}
     </Link>
   );
 }
@@ -257,6 +278,18 @@ function UserMenu({ user }: { user: AdminUser }) {
 }
 
 function Topbar({ user, onOpenMenu }: { user: AdminUser; onOpenMenu: () => void }) {
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  const pages = NAV.flatMap((s) => s.items).filter((i) => !i.roles || i.roles.includes(user.role));
   const pathname = usePathname();
   const section = pathname.split('/')[2];
   const info = section ? SECTIONS[section] : undefined;
@@ -284,6 +317,19 @@ function Topbar({ user, onOpenMenu }: { user: AdminUser; onOpenMenu: () => void 
         </motion.div>
       </AnimatePresence>
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+        <button
+          type="button"
+          onClick={() => setPaletteOpen(true)}
+          className="hidden h-9 items-center gap-2 rounded-lg border px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:flex"
+        >
+          <Search className="size-4" />
+          Search…
+          <kbd className="ml-4 rounded border px-1 text-[10px]">Ctrl K</kbd>
+        </button>
+        <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setPaletteOpen(true)} aria-label="Search">
+          <Search />
+        </Button>
+        <CommandPalette pages={pages} open={paletteOpen} onOpenChange={setPaletteOpen} />
         {greeting && (
           <span className="mr-1 hidden items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm md:flex">
             <CalendarDays className="size-4 text-muted-foreground" />

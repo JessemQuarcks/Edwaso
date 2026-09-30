@@ -30,7 +30,7 @@ export function Stagger({ children, className }: { children: ReactNode; classNam
 
 export function StaggerItem({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <motion.div variants={item} className={className ?? 'h-full'}>
+    <motion.div variants={item} className={className}>
       {children}
     </motion.div>
   );

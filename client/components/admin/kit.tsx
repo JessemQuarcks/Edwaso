@@ -13,6 +13,10 @@ import type { Kpi } from '@/types/admin';
 
 // Small building blocks shared by the console pages.
 
+/** Native <select>, styled like the shadcn inputs. Native so filters work with a keyboard and on mobile. */
+export const SELECT_CLASS =
+  'h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30';
+
 /**
  * Signed change vs the previous period. Colour carries direction × whether that direction is
  * good; the arrow and sign carry it too, so it never relies on colour alone.

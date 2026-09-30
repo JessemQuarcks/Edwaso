@@ -4,22 +4,20 @@ import { use, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
-import { ArrowLeft, Ban, CircleCheck, Loader2, Package, Receipt, ShoppingBag, Wallet } from 'lucide-react';
+import { ArrowLeft, Ban, CircleCheck, KeyRound, Loader2, Package, Receipt, ShoppingBag, Wallet } from 'lucide-react';
+import CustomerTabs from '@/components/admin/CustomerTabs';
 import { errorMessage } from '@/lib/api';
 import { adminApi } from '@/lib/admin-api';
 import { useAdminQuery } from '@/lib/use-admin-query';
-import { formatDate, formatNumber, formatPrice, orderNumber } from '@/lib/admin-format';
+import { formatDate, formatNumber, formatPrice } from '@/lib/admin-format';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import OrderStatusBadge from '@/components/OrderStatusBadge';
 import FormError from '@/components/admin/FormError';
 import { useAdmin } from '@/components/admin/AdminShell';
 import { useToast } from '@/components/admin/Toaster';
-import { Avatar, EmptyState, KpiCard } from '@/components/admin/kit';
-import { rowMotion, Stagger, StaggerItem } from '@/components/admin/motion';
+import { Avatar, KpiCard } from '@/components/admin/kit';
+import { Stagger, StaggerItem } from '@/components/admin/motion';
 import type { CustomerDetailResponse } from '@/types/admin';
 
 export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -64,6 +62,23 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const canManage = admin.role === 'owner' || admin.role === 'admin';
   const disabled = customer.status === 'disabled';
 
+  async function sendReset() {
+    if (!confirm(`Email ${customer.name} a link to choose a new password? The link works once and expires in an hour.`)) return;
+    setBusy(true);
+    setActionError('');
+    try {
+      const res = await adminApi<{ email: string }>(`/customers/${customer._id}/password-reset`, { method: 'POST' });
+      toast(res.email === 'failed' ? 'The email couldn’t be sent' : 'Password reset email sent', {
+        description: res.email === 'logged' ? 'No email provider is set up, so it was written to the server log' : customer.email,
+        variant: res.email === 'failed' ? 'error' : 'success',
+      });
+    } catch (err) {
+      setActionError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function toggleStatus() {
     const next = disabled ? 'active' : 'disabled';
     if (next === 'disabled' && !confirm(`Disable ${customer.name}? They’ll be signed out and can’t sign in to the store.`)) return;
@@ -104,10 +119,16 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           </div>
         </div>
         {canManage && (
+          <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => void sendReset()} disabled={busy || disabled}>
+            <KeyRound />
+            Send password reset
+          </Button>
           <Button variant={disabled ? 'default' : 'outline'} onClick={() => void toggleStatus()} disabled={busy}>
             {busy ? <Loader2 className="animate-spin" /> : disabled ? <CircleCheck /> : <Ban />}
             {disabled ? 'Re-enable account' : 'Disable account'}
           </Button>
+          </div>
         )}
       </motion.div>
 
@@ -128,50 +149,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
         </StaggerItem>
       </Stagger>
 
-      <Card className="gap-0 py-0">
-        <CardHeader className="border-b py-4">
-          <CardTitle>Order history</CardTitle>
-        </CardHeader>
-        {orders.length === 0 ? (
-          <EmptyState icon={Receipt} title="No orders yet" />
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="pl-6">Order</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-right">Items</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="pr-6">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orders.map((o, i) => (
-                  <motion.tr
-                    key={o._id}
-                    {...rowMotion(i)}
-                    onClick={() => router.push(`/admin/orders/${o._id}`)}
-                    className="cursor-pointer border-b transition-colors hover:bg-muted/50"
-                  >
-                    <TableCell className="pl-6 font-medium">
-                      <Link href={`/admin/orders/${o._id}`} onClick={(e) => e.stopPropagation()} className="hover:underline">
-                        {orderNumber(o._id)}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{formatDate(o.createdAt)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{o.items.reduce((n, it) => n + it.quantity, 0)}</TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">{formatPrice(o.total)}</TableCell>
-                    <TableCell className="pr-6">
-                      <OrderStatusBadge status={o.status} />
-                    </TableCell>
-                  </motion.tr>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </Card>
+      <CustomerTabs customerId={customer._id} orders={orders} />
     </div>
   );
 }
