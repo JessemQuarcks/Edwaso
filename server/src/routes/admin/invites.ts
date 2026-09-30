@@ -8,6 +8,7 @@ import { emailSchema, parse, passwordSchema } from '../../middleware/validate.js
 import { pendingSteps, requireAdmin, startAdminSession } from '../../middleware/adminSession.js';
 import { audit } from '../../lib/audit.js';
 import { randomToken, sha256 } from '../../lib/crypto.js';
+import { sendAdminInvite } from '../../lib/emails.js';
 import { publicAdmin } from './auth.js';
 
 const INVITE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -67,11 +68,15 @@ inviteRoutes.post(
       invitedBy: user._id,
       expiresAt: new Date(Date.now() + INVITE_TTL_MS),
     });
-    await audit(req, 'invite.create', { entity: 'AdminInvite', entityId: invite.id, meta: { email, role } });
+    const inviteUrl = `${process.env.CLIENT_URL}/admin/invite/${token}`;
+    const mail = await sendAdminInvite({ email, role, inviterName: user.name, url: inviteUrl, expiresAt: invite.expiresAt });
+    const emailed = mail.status === 'sent';
+    await audit(req, 'invite.create', { entity: 'AdminInvite', entityId: invite.id, meta: { email, role, emailed } });
 
-    // No email provider yet (roadmap phase 4), so the link is returned once for the inviter to
-    // pass on. Only the hash is stored; the link cannot be recovered later.
-    res.status(201).json({ invite, inviteUrl: `${process.env.CLIENT_URL}/admin/invite/${token}` });
+    // The link goes only to the invitee's inbox. If it couldn't be emailed (no provider set up,
+    // or the send failed), it is returned once for the inviter to pass on. Only the hash is
+    // stored, so it can't be recovered later.
+    res.status(201).json({ invite, emailed, ...(emailed ? {} : { inviteUrl }) });
   })
 );
 

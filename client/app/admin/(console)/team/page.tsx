@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Check, Copy, Loader2, Lock, Send, X } from 'lucide-react';
+import { Check, Copy, Loader2, Lock, MailCheck, Send, X } from 'lucide-react';
 import { errorMessage } from '@/lib/api';
 import { adminApi } from '@/lib/admin-api';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -34,7 +34,8 @@ export default function TeamPage() {
   const [invites, setInvites] = useState<Invite[]>([]);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<InviteRole>('staff');
-  const [link, setLink] = useState<{ email: string; url: string } | null>(null);
+  // `url` only when the invite couldn't be emailed and has to be passed on by hand.
+  const [link, setLink] = useState<{ email: string; url?: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
@@ -66,8 +67,8 @@ export default function TeamPage() {
     setError('');
     setSending(true);
     try {
-      const res = await adminApi<{ inviteUrl: string }>('/invites', { method: 'POST', body: { email, role } });
-      setLink({ email, url: res.inviteUrl });
+      const res = await adminApi<{ emailed: boolean; inviteUrl?: string }>('/invites', { method: 'POST', body: { email, role } });
+      setLink({ email, url: res.emailed ? undefined : res.inviteUrl });
       setCopied(false);
       setEmail('');
       await load();
@@ -89,7 +90,7 @@ export default function TeamPage() {
   }
 
   async function copyLink() {
-    if (!link) return;
+    if (!link?.url) return;
     try {
       await navigator.clipboard.writeText(link.url);
       setCopied(true);
@@ -105,7 +106,7 @@ export default function TeamPage() {
       <Card>
         <CardHeader>
           <CardTitle>Invite someone</CardTitle>
-          <CardDescription>They get a one-time link, valid for 24 hours, to set a password and turn on two-factor.</CardDescription>
+          <CardDescription>We email them a one-time link, valid for 24 hours, to set a password and turn on two-factor.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <form onSubmit={invite} className="grid gap-4 sm:grid-cols-[1fr_12rem_auto] sm:items-end">
@@ -144,13 +145,21 @@ export default function TeamPage() {
 
           <FormError message={error} />
 
-          {link && (
+          {link && !link.url && (
+            <Alert>
+              <MailCheck />
+              <AlertTitle>Invite emailed to {link.email}</AlertTitle>
+              <AlertDescription>The link works once and expires in 24 hours. Ask them to check their spam folder if it doesn’t arrive.</AlertDescription>
+            </Alert>
+          )}
+
+          {link?.url && (
             <Alert>
               <Check />
               <AlertTitle>Invite link for {link.email}</AlertTitle>
               <AlertDescription className="flex flex-col gap-2">
                 <span>
-                  Send this link to them privately. It’s shown only once; if it gets lost, create a new invite.
+                  Email isn’t set up (or the email failed), so send this link to them privately. It’s shown only once; if it gets lost, create a new invite.
                 </span>
                 <div className="flex w-full items-center gap-2">
                   <code className="min-w-0 flex-1 truncate rounded-md bg-muted px-2 py-1 font-mono text-xs select-all">
