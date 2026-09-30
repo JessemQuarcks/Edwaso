@@ -11,6 +11,13 @@ export const isAdminRole = (role: Role): boolean => ADMIN_ROLES.includes(role);
 export const USER_STATUSES = ['active', 'disabled'] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
 
+/** Staff email alerts. Unset means the role's default (see lib/notify.ts). */
+export interface NotifyPrefs {
+  orders?: boolean;
+  stock?: boolean;
+  payments?: boolean;
+}
+
 export const CUSTOMER_MIN_PASSWORD = 8;
 export const ADMIN_MIN_PASSWORD = 12;
 
@@ -38,6 +45,7 @@ export interface IUser {
   // One-time password reset (storefront accounts). Only the hash is stored.
   resetTokenHash?: string;
   resetTokenExpires?: Date;
+  notify?: NotifyPrefs;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -68,6 +76,7 @@ const userSchema = new Schema<IUser, UserModel, IUserMethods>(
     recoveryCodes: { type: [String], default: [], select: false },
     resetTokenHash: { type: String, select: false, index: { sparse: true } },
     resetTokenExpires: { type: Date, select: false },
+    notify: { type: new Schema<NotifyPrefs>({ orders: Boolean, stock: Boolean, payments: Boolean }, { _id: false }) },
   },
   { timestamps: true }
 );

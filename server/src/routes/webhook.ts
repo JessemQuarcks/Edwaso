@@ -3,6 +3,8 @@ import type Stripe from 'stripe';
 import Order, { type IShippingAddress } from '../models/Order.js';
 import { adjustForOrder } from '../lib/inventory.js';
 import { recordPayment, syncRefunds } from '../lib/payments.js';
+import { orderPaid, webhookFailed, webhookSucceeded } from '../lib/notify.js';
+import { SALE_STATUSES } from '../models/Order.js';
 import { getStripe } from '../config/stripe.js';
 
 // Stripe has moved shipping details between fields across API versions, so read both
@@ -45,10 +47,12 @@ export const stripeWebhook: RequestHandler = async (req, res) => {
         { status: 'cancelled', $push: { statusHistory: { status: 'cancelled', at: new Date(), note: 'Checkout expired' } } }
       );
     }
+    await webhookSucceeded(event.id);
     res.json({ received: true });
   } catch (err) {
     // A non-2xx response makes Stripe retry the event.
     console.error('Webhook handler error:', err);
+    await webhookFailed(event, err);
     res.status(500).send('Webhook handler failed');
   }
 };
@@ -94,4 +98,7 @@ async function handlePaid(session: Stripe.Checkout.Session): Promise<void> {
   // 2. record the payment and Stripe's fee, unless already done.
   const current = order ?? (await Order.findById(session.metadata?.orderId));
   if (current && !current.payment?.paymentIntentId) await recordPayment(current, session);
+
+  // 3. confirmation email and staff notification (each deduplicated, so redeliveries are harmless).
+  if (current && SALE_STATUSES.includes(current.status)) await orderPaid(current);
 }

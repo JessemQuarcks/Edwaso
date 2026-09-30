@@ -277,7 +277,7 @@ router.get(
       }
     }
     for (const e of emails) {
-      events.push({ at: e.createdAt, kind: 'email', title: `Email: ${e.subject}`, detail: e.status === 'failed' ? 'Failed to send' : undefined });
+      events.push({ at: e.createdAt, kind: 'email', title: `Email: ${e.subject}`, detail: e.status === 'failed' ? 'Failed to send' : e.status === 'logged' ? 'Not sent: email isn’t set up' : undefined });
     }
     for (const a of actions) {
       events.push({ at: a.createdAt, kind: 'admin', title: ADMIN_EVENT[a.action] ?? a.action, actor: a.actorEmail });

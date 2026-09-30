@@ -4,6 +4,7 @@ import Order, { SALE_STATUSES, type OrderDoc } from '../models/Order.js';
 import Transaction from '../models/Transaction.js';
 import { getStripe } from '../config/stripe.js';
 import { HttpError } from '../middleware/error.js';
+import { customerOrderUpdate } from './notify.js';
 
 // Money movements for an order: recording the payment (with Stripe's fee) and refunds.
 // Every write is keyed by a Stripe id, so a retried webhook or a double click can't
@@ -124,6 +125,8 @@ export async function applyRefund(
     order.statusHistory.push({ status: 'refunded', at, by: options.by, note: options.note });
     await order.save();
   }
+  // A refund inside a cancellation is covered by the cancellation email instead.
+  if (!options.keepStatus) await customerOrderUpdate(order, { amount: refund.amount, cancelled: false });
   return order;
 }
 

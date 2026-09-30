@@ -8,6 +8,7 @@ import { parse } from '../../middleware/validate.js';
 import { requireAdmin, requireRole } from '../../middleware/adminSession.js';
 import { audit } from '../../lib/audit.js';
 import { sendOrderShipped } from '../../lib/emails.js';
+import { customerOrderUpdate } from '../../lib/notify.js';
 import { adjustForOrder } from '../../lib/inventory.js';
 import { refundable, refundOrder } from '../../lib/payments.js';
 import { escapeRegex, toCsv } from '../../lib/text.js';
@@ -177,7 +178,7 @@ const statusSchema = z.object({
   carrier: z.string().trim().max(60).optional(),
   trackingNumber: z.string().trim().max(100).optional(),
   trackingUrl: z.union([z.literal(''), z.url({ protocol: /^https?$/, error: 'Tracking URL must be an http(s) link' })]).optional(),
-  /** Email the customer when the order ships. */
+  /** Email the customer when the order ships or a paid order is cancelled. */
   notify: z.boolean().default(true),
   // Cancellation of a paid order.
   refund: z.boolean().default(false),
@@ -227,6 +228,11 @@ router.patch(
     if (input.status === 'shipped' && input.notify) {
       const customer = await User.findById(order.user).select('name email');
       if (customer) emailed = (await sendOrderShipped(order, customer)).status !== 'failed';
+    }
+    // Customers who paid hear about a cancellation (and its refund) in one email.
+    if (input.status === 'cancelled' && input.notify && before.status !== 'pending') {
+      await customerOrderUpdate(order, { amount: refunded, cancelled: true });
+      emailed = true;
     }
 
     await audit(req, 'order.status', {

@@ -1,7 +1,4 @@
 import { Router } from 'express';
-import Order, { SALE_STATUSES } from '../../models/Order.js';
-import Product from '../../models/Product.js';
-import { asyncHandler } from '../../middleware/error.js';
 import {
   requireAdminSession,
   requireRole,
@@ -22,7 +19,7 @@ import uploadRoutes from './uploads.js';
 import financeRoutes from './finance.js';
 import auditRoutes from './audit.js';
 import searchRoutes from './search.js';
-import { getSettings } from '../../lib/settings.js';
+import notificationRoutes from './notifications.js';
 
 // Everything under /api/admin. Authenticated only by the admin session cookie, never by a
 // storefront token. Order matters: each `use` below guards every route registered after it.
@@ -56,24 +53,7 @@ router.use('/invites', requireRole('owner', 'admin'), inviteRoutes);
 router.use('/team', requireRole('owner', 'admin'), teamRoutes);
 
 // Polled by the console shell for the sidebar badge and the notifications menu.
-router.get(
-  '/notifications',
-  asyncHandler(async (_req, res) => {
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const lowStockFilter = { stock: { $lte: (await getSettings()).lowStockThreshold }, status: { $ne: 'archived' } };
-    const [awaitingShipment, lowStock, lowStockCount, recentOrders] = await Promise.all([
-      Order.countDocuments({ status: { $in: ['paid', 'processing'] } }),
-      Product.find(lowStockFilter).sort({ stock: 1 }).limit(5).select('name stock'),
-      Product.countDocuments(lowStockFilter),
-      Order.find({ status: { $in: SALE_STATUSES }, paidAt: { $gte: since } })
-        .sort({ paidAt: -1 })
-        .limit(5)
-        .select('total paidAt user')
-        .populate('user', 'name'),
-    ]);
-    res.json({ awaitingShipment, lowStock, lowStockCount, recentOrders });
-  })
-);
+router.use('/notifications', notificationRoutes);
 
 router.use('/audit', requireRole('owner', 'admin'), auditRoutes);
 router.use('/search', searchRoutes);

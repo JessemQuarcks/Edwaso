@@ -218,11 +218,12 @@ function CancelDialog({
   refundable: number;
   busy: boolean;
   error: string;
-  onSubmit: (body: { note?: string; refund: boolean; restock: boolean }) => void;
+  onSubmit: (body: { note?: string; refund: boolean; restock: boolean; notify: boolean }) => void;
 }) {
   const [note, setNote] = useState('');
   const [refund, setRefund] = useState(true);
   const [restock, setRestock] = useState(true);
+  const [notify, setNotify] = useState(true);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -256,6 +257,12 @@ function CancelDialog({
               Put the items back in stock
             </label>
           )}
+          {paid && (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" className="size-4 accent-primary" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
+              Email the customer that it’s cancelled{refund && canRefund ? ' and refunded' : ''}
+            </label>
+          )}
           <div className="grid gap-2">
             <Label htmlFor="cancel-note">Reason (optional, visible to staff)</Label>
             <Textarea id="cancel-note" rows={2} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} />
@@ -269,7 +276,7 @@ function CancelDialog({
           <Button
             variant="destructive"
             disabled={busy}
-            onClick={() => onSubmit({ note: note || undefined, refund: paid && canRefund && refund, restock: stockTaken && restock })}
+            onClick={() => onSubmit({ note: note || undefined, refund: paid && canRefund && refund, restock: stockTaken && restock, notify: paid && notify })}
           >
             {busy && <Loader2 className="animate-spin" />}
             Cancel order
