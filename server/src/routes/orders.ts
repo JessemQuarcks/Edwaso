@@ -6,8 +6,8 @@ import { asyncHandler, HttpError } from '../middleware/error.js';
 // A customer's own orders. Order management lives under /api/admin/orders.
 const router = Router();
 
-/** Staff-only fields: internal notes, unit costs, Stripe fees and who issued a refund. */
-const PRIVATE_FIELDS = '-notes -items.costPrice -payment -refunds.by -stripeSessionId';
+/** Staff-only fields: internal notes, unit costs, Stripe fees, and who changed what and why. */
+const PRIVATE_FIELDS = '-notes -items.costPrice -payment -refunds.by -refunds.reason -statusHistory.by -statusHistory.note -stripeSessionId';
 
 router.use(protect);
 

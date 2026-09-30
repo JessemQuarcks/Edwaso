@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import User, { CUSTOMER_MIN_PASSWORD, type UserDoc } from '../models/User.js';
+import User, { ADMIN_MIN_PASSWORD, CUSTOMER_MIN_PASSWORD, isAdminRole, type UserDoc } from '../models/User.js';
 import { protect, requireUser } from '../middleware/auth.js';
 import { asyncHandler, HttpError } from '../middleware/error.js';
 import { emailSchema, parse, passwordSchema } from '../middleware/validate.js';
@@ -107,6 +107,44 @@ router.post(
     user.resetTokenHash = undefined;
     user.resetTokenExpires = undefined;
     // Sign out every device that had the old password.
+    user.tokenVersion += 1;
+    await user.save();
+    res.json({ token: issueToken(user), user: publicUser(user) });
+  })
+);
+
+const profileSchema = z.object({ name: z.string({ error: 'Name is required' }).trim().min(1, 'Name is required').max(100) });
+
+router.patch(
+  '/me',
+  protect,
+  asyncHandler(async (req, res) => {
+    const user = requireUser(req);
+    user.name = parse(profileSchema, req.body).name;
+    await user.save();
+    res.json({ user: publicUser(user) });
+  })
+);
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string({ error: 'Enter your current password' }).min(1, 'Enter your current password'),
+  newPassword: passwordSchema(CUSTOMER_MIN_PASSWORD),
+});
+
+// Signs out every other device (tokenVersion bump) and returns a fresh token for this one.
+router.post(
+  '/password',
+  protect,
+  asyncHandler(async (req, res) => {
+    const { currentPassword, newPassword } = parse(changePasswordSchema, req.body);
+    const user = await User.findById(requireUser(req)._id).select('+password');
+    if (!user) throw new HttpError(401, 'Not authenticated');
+    if (!(await user.matchPassword(currentPassword))) throw new HttpError(400, 'Current password is incorrect');
+    // The same account may sign in to the admin console; keep the stricter admin minimum.
+    if (isAdminRole(user.role) && newPassword.length < ADMIN_MIN_PASSWORD) {
+      throw new HttpError(400, `Staff passwords must be at least ${ADMIN_MIN_PASSWORD} characters`);
+    }
+    user.password = newPassword;
     user.tokenVersion += 1;
     await user.save();
     res.json({ token: issueToken(user), user: publicUser(user) });

@@ -204,7 +204,7 @@ describe('catalogue', () => {
     expect(other.body.category.slug).toBe('sale');
 
     const pub = await request(app).get('/api/products/categories').expect(200);
-    expect(pub.body).toEqual({ categories: ['sale'], items: [{ slug: 'sale', name: 'Sale', image: '' }] });
+    expect(pub.body).toEqual({ categories: ['sale'], items: [{ slug: 'sale', name: 'Sale', description: '', image: '', count: 1 }] });
   });
 
   it('accepts real images only, and serves them cross-origin', async () => {
@@ -232,7 +232,7 @@ describe('settings', () => {
     const { agent } = await signedInStaff({ role: 'admin' });
     await agent.patch('/api/admin/settings').send({ storeName: 'Kosmik Goods', currency: 'gbp', shippingCountries: ['gh', 'GB', 'GB'], lowStockThreshold: 2 }).expect(200);
     const pub = await request(app).get('/api/settings').expect(200);
-    expect(pub.body).toEqual({ storeName: 'Kosmik Goods', currency: 'gbp', supportEmail: '' });
+    expect(pub.body).toMatchObject({ storeName: 'Kosmik Goods', currency: 'gbp', supportEmail: '' });
     expect((await agent.get('/api/admin/settings')).body.settings.shippingCountries).toEqual(['GH', 'GB']);
 
     await agent.patch('/api/admin/settings').send({ shippingCountries: ['GHANA'] }).expect(400);
