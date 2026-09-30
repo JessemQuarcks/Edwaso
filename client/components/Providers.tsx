@@ -19,6 +19,8 @@ interface AuthValue {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
+  /** Adopt a new session (after a password change) or updated profile. */
+  setSession: (user: User, token?: string) => void;
 }
 
 interface CartValue {
@@ -29,6 +31,12 @@ interface CartValue {
   setQuantity: (id: string, quantity: number) => void;
   remove: (id: string) => void;
   clear: () => void;
+  /** The slide-over cart. */
+  drawerOpen: boolean;
+  openDrawer: () => void;
+  closeDrawer: () => void;
+  /** Increments on every add, so the header badge can animate. */
+  bump: number;
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -64,6 +72,8 @@ export default function Providers({ children, store }: { children: ReactNode; st
   const [authReady, setAuthReady] = useState(false);
   const [items, setItems] = useState<CartItem[]>([]);
   const [cartReady, setCartReady] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [bump, setBump] = useState(0);
 
   // Restore session.
   useEffect(() => {
@@ -108,6 +118,10 @@ export default function Providers({ children, store }: { children: ReactNode; st
         clearToken();
         setUser(null);
       },
+      setSession: (next, token) => {
+        if (token) setToken(token);
+        setUser(next);
+      },
     }),
     [user, authReady, authenticate]
   );
@@ -117,7 +131,8 @@ export default function Providers({ children, store }: { children: ReactNode; st
       items,
       count: items.reduce((n, i) => n + i.quantity, 0),
       total: items.reduce((sum, i) => sum + i.price * i.quantity, 0),
-      add: (product, quantity = 1) =>
+      add: (product, quantity = 1) => {
+        setBump((b) => b + 1);
         setItems((prev) => {
           const existing = prev.find((i) => i.id === product._id);
           if (existing) {
@@ -138,7 +153,8 @@ export default function Providers({ children, store }: { children: ReactNode; st
               quantity: Math.min(quantity, product.stock),
             },
           ];
-        }),
+        });
+      },
       setQuantity: (id, quantity) =>
         setItems((prev) =>
           prev.map((i) =>
@@ -147,8 +163,12 @@ export default function Providers({ children, store }: { children: ReactNode; st
         ),
       remove: (id) => setItems((prev) => prev.filter((i) => i.id !== id)),
       clear: () => setItems([]),
+      drawerOpen,
+      openDrawer: () => setDrawerOpen(true),
+      closeDrawer: () => setDrawerOpen(false),
+      bump,
     }),
-    [items]
+    [items, drawerOpen, bump]
   );
 
   return (
