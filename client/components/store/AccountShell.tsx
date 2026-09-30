@@ -38,12 +38,12 @@ export default function AccountShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
+      <div className="print:hidden">
         <p className="text-sm text-muted-foreground">My account</p>
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Hi, {user.name.split(' ')[0]}</h1>
       </div>
-      <div className="grid gap-8 md:grid-cols-[220px_1fr]">
-        <nav className="flex gap-1 overflow-x-auto md:flex-col" aria-label="Account">
+      <div className="grid gap-8 md:grid-cols-[220px_1fr] print:block">
+        <nav className="flex gap-1 overflow-x-auto md:flex-col print:hidden" aria-label="Account">
           {NAV.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}

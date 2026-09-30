@@ -57,7 +57,8 @@ Migrated admins must change their password and enrol 2FA at their next sign-in.
 | `/shop` | Catalogue with category, search, price, in-stock and sort filters (all in the URL) |
 | `/products/:id` | Gallery, stock indicator, related products, Open Graph and JSON-LD |
 | `/cart` | Full cart; the header cart button opens a slide-over drawer instead |
-| `/account` | Profile, orders with a delivery tracker, password change (`/orders` redirects here) |
+| `/account/orders` | Orders & tracking: in-progress orders with a live tracker and tracking link, delivered history by month with *Buy again*, cancelled/refunded, unfinished payments, search. Linked from the header next to the cart |
+| `/account` | Profile and password change (`/orders` redirects to `/account/orders`) |
 
 - **Editing the home page**: *Settings → Storefront* in the admin console sets the announcement bar,
   hero copy, promo section, testimonials and social links. Sections with no content are hidden, and
@@ -224,6 +225,11 @@ not Radix). There is no hand-written CSS beyond the theme tokens.
    creates a `pending` order, and returns a Stripe Checkout URL.
 3. Stripe redirects to `/checkout/success`; meanwhile `checkout.session.completed` hits `/api/webhook`,
    which marks the order `paid`, saves the shipping address and decrements stock (idempotently).
+4. As a fallback for a late or unreachable webhook (e.g. `stripe listen` not running locally), the
+   success page calls `POST /api/checkout/confirm` and the orders page re-checks the customer's pending
+   orders with Stripe. Both run the same idempotent code as the webhook (`server/src/lib/checkout-sync.ts`).
+   Unfinished checkouts show as *Awaiting payment* with a link back to Stripe; expired ones are cancelled
+   and hidden from the customer.
 
 ## API
 
@@ -236,7 +242,8 @@ not Radix). There is no hand-written CSS beyond the theme tokens.
 | GET | `/api/auth/me` | customer token |
 | GET | `/api/products` (`q`, `category`, `sort`, `minPrice`, `maxPrice`, `inStock`, `featured`, `exclude`), `/api/products/:id`, `/api/products/categories` | – |
 | POST | `/api/checkout` | customer token |
-| GET | `/api/orders/mine`, `/api/orders/:id` | customer token |
+| GET | `/api/orders/mine`, `/api/orders/mine/summary`, `/api/orders/:id` | customer token |
+| POST | `/api/checkout/confirm` (`sessionId`) | customer token |
 | POST | `/api/webhook` | Stripe signature |
 | POST | `/api/admin/auth/login`, `/login/2fa`, `/logout` | – |
 | GET/POST | `/api/admin/invitations/:token[/accept]` | invite token |

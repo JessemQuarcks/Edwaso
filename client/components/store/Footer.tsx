@@ -36,7 +36,7 @@ export default function Footer({ store, categories }: { store: StoreInfo; catego
   const year = new Date().getFullYear();
 
   return (
-    <footer className="mt-24 border-t bg-muted/30">
+    <footer className="mt-24 border-t bg-muted/30 print:hidden">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div className="flex flex-col gap-4">
           <Link href="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
