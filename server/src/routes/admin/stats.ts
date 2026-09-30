@@ -1,9 +1,10 @@
 import { Router } from 'express';
-import Order, { type OrderStatus } from '../../models/Order.js';
+import Order, { SALE_STATUSES, type OrderStatus } from '../../models/Order.js';
 import Product from '../../models/Product.js';
 import User from '../../models/User.js';
 import { asyncHandler, HttpError } from '../../middleware/error.js';
 import { parse } from '../../middleware/validate.js';
+import { getSettings } from '../../lib/settings.js';
 import {
   buckets,
   MONGO_FORMAT,
@@ -16,15 +17,14 @@ import {
 
 const router = Router();
 
-/** Orders that count as sales: paid, whether or not they have shipped yet. */
-export const COMPLETED: OrderStatus[] = ['paid', 'shipped'];
-export const LOW_STOCK_THRESHOLD = 5;
+/** Revenue an order contributes: its total less anything refunded. */
+const NET_TOTAL = { $subtract: ['$total', { $ifNull: ['$amountRefunded', 0] }] };
 
 /** When the sale happened. Orders marked paid by hand before `paidAt` existed fall back to creation. */
 const SOLD_AT = { $ifNull: ['$paidAt', '$createdAt'] };
 
 const soldBetween = (from: Date, to: Date) => ({
-  status: { $in: COMPLETED },
+  status: { $in: SALE_STATUSES },
   $or: [
     { paidAt: { $gte: from, $lt: to } },
     { paidAt: { $exists: false }, createdAt: { $gte: from, $lt: to } },
@@ -43,7 +43,7 @@ async function totals(from: Date, to: Date): Promise<Totals> {
     {
       $group: {
         _id: null,
-        revenue: { $sum: '$total' },
+        revenue: { $sum: NET_TOTAL },
         orders: { $sum: 1 },
         units: { $sum: { $sum: '$items.quantity' } },
       },
@@ -64,7 +64,7 @@ async function bucketed(from: Date, to: Date, unit: Unit, tz: string): Promise<M
     {
       $group: {
         _id: { $dateToString: { format: MONGO_FORMAT[unit], date: SOLD_AT, timezone: tz } },
-        revenue: { $sum: '$total' },
+        revenue: { $sum: NET_TOTAL },
         orders: { $sum: 1 },
       },
     },
@@ -156,7 +156,7 @@ const kpi = (value: number, previous?: number) => ({
 });
 
 async function earliestSale(): Promise<Date | null> {
-  const first = await Order.findOne({ status: { $in: COMPLETED } })
+  const first = await Order.findOne({ status: { $in: SALE_STATUSES } })
     .sort({ createdAt: 1 })
     .select('createdAt paidAt');
   return first ? (first.paidAt ?? first.createdAt) : null;
@@ -212,11 +212,11 @@ router.get(
         .sort({ createdAt: -1 })
         .limit(8)
         .populate('user', 'name email'),
-      Product.find({ stock: { $lte: LOW_STOCK_THRESHOLD } })
+      Product.find({ stock: { $lte: (await getSettings()).lowStockThreshold }, status: { $ne: 'archived' } })
         .sort({ stock: 1 })
         .limit(5)
         .select('name stock image'),
-      Order.countDocuments({ status: 'paid' }),
+      Order.countDocuments({ status: { $in: ['paid', 'processing'] } }),
     ]);
 
     res.json({
@@ -275,7 +275,7 @@ router.get(
         ]),
         Order.aggregate<{ customerId: string; name: string; email: string; orders: number; spent: number }>([
           { $match: soldBetween(from, to) },
-          { $group: { _id: '$user', orders: { $sum: 1 }, spent: { $sum: '$total' } } },
+          { $group: { _id: '$user', orders: { $sum: 1 }, spent: { $sum: NET_TOTAL } } },
           { $sort: { spent: -1 } },
           { $limit: 5 },
           { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },

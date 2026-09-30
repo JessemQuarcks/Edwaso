@@ -1,10 +1,7 @@
 import { Router } from 'express';
-import { z } from 'zod';
-import AuditLog from '../../models/AuditLog.js';
-import Order from '../../models/Order.js';
+import Order, { SALE_STATUSES } from '../../models/Order.js';
 import Product from '../../models/Product.js';
 import { asyncHandler } from '../../middleware/error.js';
-import { parse } from '../../middleware/validate.js';
 import {
   requireAdminSession,
   requireRole,
@@ -18,7 +15,14 @@ import productRoutes from './products.js';
 import orderRoutes from './orders.js';
 import customerRoutes from './customers.js';
 import teamRoutes from './team.js';
-import statsRoutes, { LOW_STOCK_THRESHOLD } from './stats.js';
+import statsRoutes from './stats.js';
+import settingsRoutes from './settings.js';
+import categoryRoutes from './categories.js';
+import uploadRoutes from './uploads.js';
+import financeRoutes from './finance.js';
+import auditRoutes from './audit.js';
+import searchRoutes from './search.js';
+import { getSettings } from '../../lib/settings.js';
 
 // Everything under /api/admin. Authenticated only by the admin session cookie, never by a
 // storefront token. Order matters: each `use` below guards every route registered after it.
@@ -43,6 +47,10 @@ router.use(requireSetupComplete);
 router.use('/products', productRoutes);
 router.use('/orders', orderRoutes);
 router.use('/customers', customerRoutes);
+router.use('/categories', categoryRoutes);
+router.use('/uploads', uploadRoutes);
+router.use('/settings', settingsRoutes);
+router.use('/finance', requireRole('owner', 'admin'), financeRoutes);
 router.use('/stats', statsRoutes);
 router.use('/invites', requireRole('owner', 'admin'), inviteRoutes);
 router.use('/team', requireRole('owner', 'admin'), teamRoutes);
@@ -52,11 +60,12 @@ router.get(
   '/notifications',
   asyncHandler(async (_req, res) => {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const lowStockFilter = { stock: { $lte: (await getSettings()).lowStockThreshold }, status: { $ne: 'archived' } };
     const [awaitingShipment, lowStock, lowStockCount, recentOrders] = await Promise.all([
-      Order.countDocuments({ status: 'paid' }),
-      Product.find({ stock: { $lte: LOW_STOCK_THRESHOLD } }).sort({ stock: 1 }).limit(5).select('name stock'),
-      Product.countDocuments({ stock: { $lte: LOW_STOCK_THRESHOLD } }),
-      Order.find({ status: { $in: ['paid', 'shipped'] }, paidAt: { $gte: since } })
+      Order.countDocuments({ status: { $in: ['paid', 'processing'] } }),
+      Product.find(lowStockFilter).sort({ stock: 1 }).limit(5).select('name stock'),
+      Product.countDocuments(lowStockFilter),
+      Order.find({ status: { $in: SALE_STATUSES }, paidAt: { $gte: since } })
         .sort({ paidAt: -1 })
         .limit(5)
         .select('total paidAt user')
@@ -66,21 +75,7 @@ router.get(
   })
 );
 
-const auditQuery = z.object({
-  limit: z.coerce.number().int().min(1).max(200).catch(50),
-  action: z.string().trim().max(60).optional().catch(undefined),
-});
-
-router.get(
-  '/audit',
-  requireRole('owner', 'admin'),
-  asyncHandler(async (req, res) => {
-    const { limit, action } = parse(auditQuery, req.query);
-    const entries = await AuditLog.find(action ? { action } : {})
-      .sort({ createdAt: -1 })
-      .limit(limit);
-    res.json({ entries });
-  })
-);
+router.use('/audit', requireRole('owner', 'admin'), auditRoutes);
+router.use('/search', searchRoutes);
 
 export default router;

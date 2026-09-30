@@ -4,13 +4,15 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
-import { notFound, errorHandler } from './middleware/error.js';
+import { asyncHandler, notFound, errorHandler } from './middleware/error.js';
 import { stripeWebhook } from './routes/webhook.js';
 import authRoutes from './routes/auth.js';
 import productRoutes from './routes/products.js';
 import orderRoutes from './routes/orders.js';
 import checkoutRoutes from './routes/checkout.js';
 import adminRoutes from './routes/admin/index.js';
+import { getSettings } from './lib/settings.js';
+import { UPLOAD_DIR, UPLOAD_PATH } from './lib/storage.js';
 
 export const REQUIRED_ENV = ['MONGODB_URI', 'JWT_SECRET', 'DATA_ENCRYPTION_KEY', 'CLIENT_URL'] as const;
 
@@ -44,6 +46,31 @@ export function createApp(): Express {
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true });
   });
+
+  // Uploaded product images. Cross-origin readable so the storefront (another origin) can show
+  // them, and locked down so a file can never run as a page.
+  app.use(
+    UPLOAD_PATH,
+    (_req, res, next) => {
+      res.set({
+        'Cross-Origin-Resource-Policy': 'cross-origin',
+        'Content-Security-Policy': "default-src 'none'; img-src 'self'",
+        'X-Content-Type-Options': 'nosniff',
+      });
+      next();
+    },
+    express.static(UPLOAD_DIR, { index: false, dotfiles: 'deny', maxAge: '365d', immutable: true })
+  );
+
+  // What the storefront needs to know about the store.
+  app.get(
+    '/api/settings',
+    asyncHandler(async (_req, res) => {
+      const { storeName, currency, supportEmail } = await getSettings();
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json({ storeName, currency, supportEmail });
+    })
+  );
 
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,

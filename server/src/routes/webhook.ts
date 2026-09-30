@@ -1,7 +1,8 @@
 import type { RequestHandler } from 'express';
 import type Stripe from 'stripe';
 import Order, { type IShippingAddress } from '../models/Order.js';
-import Product from '../models/Product.js';
+import { adjustForOrder } from '../lib/inventory.js';
+import { recordPayment, syncRefunds } from '../lib/payments.js';
 import { getStripe } from '../config/stripe.js';
 
 // Stripe has moved shipping details between fields across API versions, so read both
@@ -36,6 +37,8 @@ export const stripeWebhook: RequestHandler = async (req, res) => {
   try {
     if (event.type === 'checkout.session.completed') {
       await handlePaid(event.data.object);
+    } else if (event.type === 'charge.refunded') {
+      await syncRefunds(event.data.object);
     } else if (event.type === 'checkout.session.expired') {
       await Order.updateOne(
         { _id: event.data.object.metadata?.orderId, status: 'pending' },
@@ -79,17 +82,16 @@ async function handlePaid(session: Stripe.Checkout.Session): Promise<void> {
   const shippingAddress = ship ? toShippingAddress(ship) : undefined;
   if (shippingAddress) update.shippingAddress = shippingAddress;
 
-  // The status filter makes this idempotent: a retried event finds no pending order and does nothing.
+  // Two idempotent steps, so a retry after a failure part-way still completes the second:
+  // 1. pending -> paid and take the stock (the status filter makes this happen once);
   const order = await Order.findOneAndUpdate(
     { _id: session.metadata?.orderId, status: 'pending' },
     update,
     { new: true }
   );
-  if (!order) return;
+  if (order) await adjustForOrder(order, -1, 'sale');
 
-  await Product.bulkWrite(
-    order.items.map((i) => ({
-      updateOne: { filter: { _id: i.product }, update: { $inc: { stock: -i.quantity } } },
-    }))
-  );
+  // 2. record the payment and Stripe's fee, unless already done.
+  const current = order ?? (await Order.findById(session.metadata?.orderId));
+  if (current && !current.payment?.paymentIntentId) await recordPayment(current, session);
 }

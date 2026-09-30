@@ -1,14 +1,17 @@
 import { Router } from 'express';
 import type { PipelineStage } from 'mongoose';
 import { z } from 'zod';
-import Order from '../../models/Order.js';
+import Order, { SALE_STATUSES } from '../../models/Order.js';
 import User, { USER_STATUSES } from '../../models/User.js';
 import { asyncHandler, HttpError } from '../../middleware/error.js';
 import { parse } from '../../middleware/validate.js';
-import { requireRole } from '../../middleware/adminSession.js';
+import { requireAdmin, requireRole } from '../../middleware/adminSession.js';
+import AuditLog from '../../models/AuditLog.js';
+import CustomerNote from '../../models/CustomerNote.js';
+import EmailLog from '../../models/EmailLog.js';
 import { audit } from '../../lib/audit.js';
+import { startPasswordReset } from '../../lib/password-reset.js';
 import { escapeRegex } from '../../lib/text.js';
-import { COMPLETED } from './stats.js';
 
 // Storefront customers. Staff accounts are managed on the team routes.
 const router = Router();
@@ -22,8 +25,8 @@ const withOrderStats: PipelineStage[] = [
       from: 'orders',
       let: { uid: '$_id' },
       pipeline: [
-        { $match: { $expr: { $eq: ['$user', '$$uid'] }, status: { $in: COMPLETED } } },
-        { $group: { _id: null, orders: { $sum: 1 }, spent: { $sum: '$total' }, lastOrderAt: { $max: '$createdAt' } } },
+        { $match: { $expr: { $eq: ['$user', '$$uid'] }, status: { $in: SALE_STATUSES } } },
+        { $group: { _id: null, orders: { $sum: 1 }, spent: { $sum: { $subtract: ['$total', { $ifNull: ['$amountRefunded', 0] }] } }, lastOrderAt: { $max: '$createdAt' } } },
       ],
       as: 'stats',
     },
@@ -85,12 +88,12 @@ router.get(
     const [orders, [stats]] = await Promise.all([
       Order.find({ user: customer._id, status: { $ne: 'pending' } }).sort({ createdAt: -1 }).limit(50),
       Order.aggregate<{ orders: number; spent: number; units: number; firstOrderAt: Date; lastOrderAt: Date }>([
-        { $match: { user: customer._id, status: { $in: COMPLETED } } },
+        { $match: { user: customer._id, status: { $in: SALE_STATUSES } } },
         {
           $group: {
             _id: null,
             orders: { $sum: 1 },
-            spent: { $sum: '$total' },
+            spent: { $sum: { $subtract: ['$total', { $ifNull: ['$amountRefunded', 0] }] } },
             units: { $sum: { $sum: '$items.quantity' } },
             firstOrderAt: { $min: '$createdAt' },
             lastOrderAt: { $max: '$createdAt' },
@@ -137,6 +140,126 @@ router.patch(
       });
     }
     res.json({ customer: { _id: customer.id, name: customer.name, email: customer.email, status: customer.status } });
+  })
+);
+
+const findCustomer = async (id: string) => {
+  const customer = await User.findOne({ _id: id, role: 'customer' });
+  if (!customer) throw new HttpError(404, 'Customer not found');
+  return customer;
+};
+
+// Emails a one-time reset link. The link is never shown to staff: whoever can see it can take
+// over the account.
+router.post(
+  '/:id/password-reset',
+  requireRole('owner', 'admin'),
+  asyncHandler(async (req, res) => {
+    const customer = await findCustomer(req.params.id!);
+    if (customer.status !== 'active') throw new HttpError(400, 'Re-enable the account before resetting its password');
+    const log = await startPasswordReset(customer);
+    await audit(req, 'customer.password_reset', { entity: 'User', entityId: customer.id, meta: { email: log.status } });
+    res.json({ email: log.status });
+  })
+);
+
+// ---- Notes ----
+
+router.get(
+  '/:id/notes',
+  asyncHandler(async (req, res) => {
+    const notes = await CustomerNote.find({ customer: req.params.id }).sort({ createdAt: -1 }).populate('author', 'name email');
+    res.json({ notes });
+  })
+);
+
+const noteSchema = z.object({ body: z.string({ error: 'Write a note' }).trim().min(1, 'Write a note').max(2000) });
+
+router.post(
+  '/:id/notes',
+  asyncHandler(async (req, res) => {
+    const { user } = requireAdmin(req);
+    const { body } = parse(noteSchema, req.body);
+    const customer = await findCustomer(req.params.id!);
+    const note = await CustomerNote.create({ customer: customer._id, author: user._id, body });
+    await note.populate('author', 'name email');
+    await audit(req, 'customer.note_add', { entity: 'User', entityId: customer.id });
+    res.status(201).json({ note });
+  })
+);
+
+router.delete(
+  '/:id/notes/:noteId',
+  asyncHandler(async (req, res) => {
+    const { user } = requireAdmin(req);
+    const note = await CustomerNote.findOne({ _id: req.params.noteId, customer: req.params.id });
+    if (!note) throw new HttpError(404, 'Note not found');
+    if (!note.author.equals(user._id) && user.role === 'staff') throw new HttpError(403, 'You can only delete your own notes');
+    await note.deleteOne();
+    await audit(req, 'customer.note_delete', { entity: 'User', entityId: req.params.id, before: { body: note.body } });
+    res.status(204).end();
+  })
+);
+
+// ---- Activity trail ----
+
+interface ActivityEvent {
+  at: Date;
+  kind: 'account' | 'order' | 'email' | 'admin';
+  title: string;
+  detail?: string;
+  orderId?: string;
+  actor?: string;
+}
+
+const ORDER_EVENT: Record<string, string> = {
+  pending: 'Placed an order',
+  paid: 'Paid for order',
+  processing: 'Order is being prepared',
+  shipped: 'Order shipped',
+  delivered: 'Order delivered',
+  cancelled: 'Order cancelled',
+  refunded: 'Order refunded',
+};
+
+const ADMIN_EVENT: Record<string, string> = {
+  'customer.disable': 'Account disabled',
+  'customer.enable': 'Account re-enabled',
+  'customer.password_reset': 'Password reset email sent',
+  'customer.note_add': 'Note added',
+  'customer.note_delete': 'Note deleted',
+};
+
+/** Everything that happened to a customer: account, orders, emails and staff actions, newest first. */
+router.get(
+  '/:id/activity',
+  asyncHandler(async (req, res) => {
+    const customer = await findCustomer(req.params.id!);
+    const [orders, emails, actions] = await Promise.all([
+      Order.find({ user: customer._id }).sort({ createdAt: -1 }).limit(50).select('createdAt statusHistory refunds total status'),
+      EmailLog.find({ user: customer._id }).sort({ createdAt: -1 }).limit(50),
+      AuditLog.find({ entity: 'User', entityId: customer.id }).sort({ createdAt: -1 }).limit(50),
+    ]);
+
+    const events: ActivityEvent[] = [{ at: customer.createdAt, kind: 'account', title: 'Created an account' }];
+    for (const o of orders) {
+      const orderId = o.id as string;
+      events.push({ at: o.createdAt, kind: 'order', title: ORDER_EVENT.pending!, orderId });
+      for (const h of o.statusHistory) {
+        events.push({ at: h.at, kind: 'order', title: ORDER_EVENT[h.status] ?? h.status, detail: h.note, orderId });
+      }
+      for (const r of o.refunds) {
+        events.push({ at: r.createdAt, kind: 'order', title: `Refund of ${(r.amount / 100).toFixed(2)}`, detail: r.reason, orderId });
+      }
+    }
+    for (const e of emails) {
+      events.push({ at: e.createdAt, kind: 'email', title: `Email: ${e.subject}`, detail: e.status === 'failed' ? 'Failed to send' : undefined });
+    }
+    for (const a of actions) {
+      events.push({ at: a.createdAt, kind: 'admin', title: ADMIN_EVENT[a.action] ?? a.action, actor: a.actorEmail });
+    }
+    events.sort((a, b) => b.at.getTime() - a.at.getTime());
+    res.json({ events: events.slice(0, 150) });
   })
 );
 

@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import type { FilterQuery } from 'mongoose';
 import { z } from 'zod';
-import Product, { type IProduct } from '../models/Product.js';
+import Category from '../models/Category.js';
+import Product, { VISIBLE, type IProduct } from '../models/Product.js';
 import { asyncHandler, HttpError } from '../middleware/error.js';
 import { parse } from '../middleware/validate.js';
 
@@ -20,7 +21,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const { page, limit, category, q } = parse(listQuery, req.query);
 
-    const filter: FilterQuery<IProduct> = {};
+    const filter: FilterQuery<IProduct> = { ...VISIBLE };
     if (category) filter.category = category;
     if (q) filter.$text = { $search: q };
 
@@ -38,14 +39,22 @@ router.get(
 router.get(
   '/categories',
   asyncHandler(async (_req, res) => {
-    res.json({ categories: await Product.distinct('category') });
+    // `categories` (slugs) is kept for older clients; `items` adds display names and images.
+    const used = (await Product.distinct('category', VISIBLE)) as string[];
+    const details = await Category.find({ slug: { $in: used } }).sort({ sortOrder: 1, name: 1 });
+    const known = new Set(details.map((c) => c.slug));
+    const items = [
+      ...details.map((c) => ({ slug: c.slug, name: c.name, image: c.image })),
+      ...used.filter((s) => !known.has(s)).map((s) => ({ slug: s, name: s.charAt(0).toUpperCase() + s.slice(1), image: '' })),
+    ];
+    res.json({ categories: items.map((c) => c.slug), items });
   })
 );
 
 router.get(
   '/:id',
   asyncHandler(async (req, res) => {
-    const product = await Product.findById(req.params.id);
+    const product = await Product.findOne({ _id: req.params.id, ...VISIBLE });
     if (!product) throw new HttpError(404, 'Product not found');
     res.json({ product });
   })

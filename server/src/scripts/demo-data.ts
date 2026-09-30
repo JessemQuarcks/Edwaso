@@ -13,6 +13,7 @@ import { connectDB } from '../config/db.js';
 import Order, { type OrderStatus } from '../models/Order.js';
 import Product from '../models/Product.js';
 import User from '../models/User.js';
+import Transaction from '../models/Transaction.js';
 import { randomToken } from '../lib/crypto.js';
 
 const DEMO_DOMAIN = 'demo.shop.test';
@@ -52,6 +53,7 @@ function poisson(mean: number): number {
 
 const FIRST = ['Ava', 'Liam', 'Noah', 'Emma', 'Kofi', 'Ama', 'Yaw', 'Esi', 'Mia', 'Lucas', 'Zara', 'Omar', 'Chloe', 'Ethan', 'Nia', 'Kwame', 'Sofia', 'Leo', 'Aisha', 'Jonah'];
 const LAST = ['Mensah', 'Smith', 'Owusu', 'Garcia', 'Boateng', 'Chen', 'Adjei', 'Patel', 'Asante', 'Brown', 'Nkrumah', 'Silva', 'Osei', 'Kim', 'Darko'];
+const CARRIERS = ['DHL', 'UPS', 'FedEx', 'Royal Mail'] as const;
 const CITIES = [
   { city: 'Accra', country: 'GH' },
   { city: 'London', country: 'GB' },
@@ -63,7 +65,7 @@ const CITIES = [
 
 async function seed(): Promise<void> {
   const months = Math.min(Math.max(Number(values.months) || 14, 1), 36);
-  const products = await Product.find().select('name image price');
+  const products = await Product.find().select('name image price sku +costPrice');
   if (products.length === 0) throw new Error('No products yet. Run `npm run seed` first.');
   if (await User.exists({ email: DEMO_EMAIL })) {
     throw new Error('Demo data already exists. Run `npm run demo -- clear` first to regenerate it.');
@@ -99,6 +101,7 @@ async function seed(): Promise<void> {
   await User.collection.insertMany(customers);
 
   const orders = [];
+  const transactions: Record<string, unknown>[] = [];
   for (let day = start; day < now; day += DAY) {
     const progress = (day - start) / (now - start);
     const weekday = new Date(day).getDay();
@@ -114,12 +117,13 @@ async function seed(): Promise<void> {
       if (eligible.length === 0) continue;
       const customer = pick(eligible);
 
-      const lines = new Map<string, { product: Types.ObjectId; name: string; image?: string; price: number; quantity: number }>();
+      const lines = new Map<string, { product: Types.ObjectId; name: string; image?: string; sku?: string; price: number; costPrice: number; quantity: number }>();
       for (let i = between(1, 3); i > 0; i--) {
         const p = pick(products);
         const existing = lines.get(p.id);
         if (existing) existing.quantity += 1;
-        else lines.set(p.id, { product: p._id, name: p.name, image: p.image, price: p.price, quantity: between(1, 2) });
+        // Demo lines carry a cost so margin reporting has something to show.
+        else lines.set(p.id, { product: p._id, name: p.name, image: p.image, sku: p.sku, price: p.price, costPrice: p.costPrice ?? Math.round(p.price * 0.45), quantity: between(1, 2) });
       }
       const items = [...lines.values()];
       const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
@@ -129,19 +133,50 @@ async function seed(): Promise<void> {
       let status: OrderStatus;
       if (ageDays < 1 && roll < 0.12) status = 'pending'; // abandoned or in-progress checkouts
       else if (roll < 0.05) status = 'cancelled';
-      else if (ageDays < 4) status = roll < 0.55 ? 'paid' : 'shipped';
-      else status = 'shipped';
+      else if (ageDays < 2) status = roll < 0.6 ? 'paid' : 'processing';
+      else if (ageDays < 6) status = roll < 0.35 ? 'processing' : 'shipped';
+      else if (ageDays < 12) status = roll < 0.5 ? 'shipped' : 'delivered';
+      else status = 'delivered';
+      // A few delivered orders were returned and refunded, some only partly.
+      const refundRoll = random();
+      const refundKind = status === 'delivered' && refundRoll < 0.025 ? 'full' : status === 'delivered' && refundRoll < 0.05 ? 'partial' : status === 'cancelled' ? 'full' : null;
 
       const paidAt = status === 'pending' ? undefined : new Date(createdAt.getTime() + between(1, 4) * 60_000);
       const history: { status: OrderStatus; at: Date; note?: string }[] = [];
       if (paidAt) history.push({ status: 'paid', at: paidAt, note: 'Payment received' });
-      if (status === 'shipped' && paidAt) history.push({ status: 'shipped', at: new Date(paidAt.getTime() + between(4, 60) * 3_600_000) });
+      const shippedAt = paidAt && ['shipped', 'delivered'].includes(status) ? new Date(paidAt.getTime() + between(4, 60) * 3_600_000) : undefined;
+      const deliveredAt = shippedAt && status === 'delivered' ? new Date(shippedAt.getTime() + between(24, 96) * 3_600_000) : undefined;
+      if (paidAt && ['processing', 'shipped', 'delivered'].includes(status)) history.push({ status: 'processing', at: new Date(paidAt.getTime() + between(1, 3) * 3_600_000) });
+      if (shippedAt) history.push({ status: 'shipped', at: shippedAt });
+      if (deliveredAt) history.push({ status: 'delivered', at: deliveredAt });
       if (status === 'cancelled' && paidAt) history.push({ status: 'cancelled', at: new Date(paidAt.getTime() + between(1, 24) * 3_600_000), note: 'Customer request' });
+      const orderId = new Types.ObjectId();
+      const paymentIntentId = paidAt ? `pi_demo_${randomToken(12)}` : undefined;
+      const fee = Math.round(total * 0.029) + 30; // Stripe's standard card rate
+      const refunds: { refundId: string; amount: number; reason: string; status: string; createdAt: Date }[] = [];
+      if (paidAt && paymentIntentId) {
+        transactions.push({
+          type: 'payment', order: orderId, stripeId: paymentIntentId, chargeId: `ch_demo_${randomToken(12)}`, currency: 'usd',
+          amount: total, fee, net: total - fee, occurredAt: paidAt, description: `Payment for order ${orderId}`, createdAt: paidAt,
+        });
+        if (refundKind) {
+          const amount = refundKind === 'full' ? total : Math.round(total * 0.3);
+          const at = new Date((history.at(-1)?.at ?? paidAt).getTime() + 3_600_000);
+          const refundId = `re_demo_${randomToken(12)}`;
+          refunds.push({ refundId, amount, reason: refundKind === 'full' ? 'Returned' : 'Damaged in transit', status: 'succeeded', createdAt: at });
+          transactions.push({ type: 'refund', order: orderId, stripeId: refundId, currency: 'usd', amount: -amount, fee: 0, net: -amount, occurredAt: at, description: `Refund for order ${orderId}`, createdAt: at });
+          if (refundKind === 'full' && status === 'delivered') {
+            status = 'refunded';
+            history.push({ status: 'refunded', at, note: 'Returned' });
+          }
+        }
+      }
+      const amountRefunded = refunds.reduce((sum, r) => sum + r.amount, 0);
       const updatedAt = history.at(-1)?.at ?? createdAt;
 
       const place = pick(CITIES);
       orders.push({
-        _id: new Types.ObjectId(),
+        _id: orderId,
         user: customer._id,
         items,
         total,
@@ -152,19 +187,28 @@ async function seed(): Promise<void> {
           ? { name: customer.name, line1: `${between(1, 240)} Market Street`, city: place.city, postalCode: String(between(10000, 99999)), country: place.country }
           : undefined,
         statusHistory: history,
+        currency: 'usd',
+        fulfillment: shippedAt ? { carrier: pick(CARRIERS), trackingNumber: `1Z${randomToken(9).toUpperCase().replace(/[^A-Z0-9]/g, '7')}`, shippedAt, deliveredAt } : undefined,
+        payment: paymentIntentId ? { paymentIntentId, amountSubtotal: total, amountTax: 0, amountShipping: 0, amountTotal: total, fee, net: total - fee } : undefined,
+        amountRefunded,
+        refunds,
+        notes: [],
         createdAt,
         updatedAt: updatedAt > new Date(now) ? new Date(now) : updatedAt,
       });
     }
   }
   if (orders.length > 0) await Order.collection.insertMany(orders);
+  if (transactions.length > 0) await Transaction.collection.insertMany(transactions);
   console.log(`Added ${customers.length} demo customers and ${orders.length} orders over ${months} months.`);
   console.log('Remove them any time with: npm run demo -- clear');
 }
 
 async function clear(): Promise<void> {
   const ids = (await User.find({ email: DEMO_EMAIL }).select('_id')).map((u) => u._id);
-  const orders = await Order.deleteMany({ user: { $in: ids } });
+  const orderIds = (await Order.find({ user: { $in: ids } }).select('_id')).map((o) => o._id);
+  await Transaction.deleteMany({ order: { $in: orderIds } });
+  const orders = await Order.deleteMany({ _id: { $in: orderIds } });
   const users = await User.deleteMany({ _id: { $in: ids } });
   console.log(`Removed ${users.deletedCount} demo customers and ${orders.deletedCount} orders.`);
 }

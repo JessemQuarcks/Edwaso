@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type Stripe from 'stripe';
-import Product from '../models/Product.js';
+import Product, { VISIBLE } from '../models/Product.js';
+import { getSettings } from '../lib/settings.js';
 import Order, { type IOrderItem } from '../models/Order.js';
 import { protect, requireUser } from '../middleware/auth.js';
 import { asyncHandler, HttpError } from '../middleware/error.js';
@@ -10,7 +11,6 @@ import { getStripe } from '../config/stripe.js';
 
 const router = Router();
 
-const CURRENCY = process.env.CURRENCY ?? 'usd';
 const MAX_LINE_ITEMS = 50;
 const MAX_QUANTITY = 99;
 
@@ -46,7 +46,9 @@ router.post(
     const user = requireUser(req);
     const quantities = parseCart(req.body);
 
-    const products = await Product.find({ _id: { $in: [...quantities.keys()] } });
+    const settings = await getSettings();
+    // Drafts and archived products can't be bought, even from a stale cart.
+    const products = await Product.find({ _id: { $in: [...quantities.keys()] }, ...VISIBLE }).select('+costPrice');
     if (products.length !== quantities.size) {
       throw new HttpError(400, 'One or more products no longer exist');
     }
@@ -56,21 +58,22 @@ router.post(
       if (p.stock < quantity) {
         throw new HttpError(400, `Only ${p.stock} of "${p.name}" left in stock`);
       }
-      return { product: p._id, name: p.name, image: p.image, price: p.price, quantity };
+      return { product: p._id, name: p.name, image: p.image, sku: p.sku, price: p.price, costPrice: p.costPrice, quantity };
     });
     const total = orderItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
-    const order = await Order.create({ user: user._id, items: orderItems, total });
+    const order = await Order.create({ user: user._id, items: orderItems, total, currency: settings.currency });
 
     try {
       const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = orderItems.map((i) => ({
         quantity: i.quantity,
         price_data: {
-          currency: CURRENCY,
+          currency: settings.currency,
           unit_amount: i.price,
           product_data: {
             name: i.name,
-            ...(i.image?.startsWith('http') ? { images: [i.image] } : {}),
+            // Stripe fetches the image itself, so only public https URLs are useful.
+            ...(i.image?.startsWith('https://') ? { images: [i.image] } : {}),
           },
         },
       }));
@@ -79,7 +82,10 @@ router.post(
         mode: 'payment',
         customer_email: user.email,
         line_items: lineItems,
-        shipping_address_collection: { allowed_countries: ['US', 'CA', 'GB'] },
+        shipping_address_collection: {
+          allowed_countries: settings.shippingCountries as Stripe.Checkout.SessionCreateParams.ShippingAddressCollection.AllowedCountry[],
+        },
+        ...(settings.automaticTax ? { automatic_tax: { enabled: true } } : {}),
         metadata: { orderId: order._id.toString() },
         success_url: `${process.env.CLIENT_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${process.env.CLIENT_URL}/cart`,
