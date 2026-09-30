@@ -35,6 +35,9 @@ export interface IUser {
   totpLastStep?: number;
   /** SHA-256 hashes of unused recovery codes. */
   recoveryCodes: string[];
+  // One-time password reset (storefront accounts). Only the hash is stored.
+  resetTokenHash?: string;
+  resetTokenExpires?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -63,6 +66,8 @@ const userSchema = new Schema<IUser, UserModel, IUserMethods>(
     totpEnabled: { type: Boolean, default: false },
     totpLastStep: Number,
     recoveryCodes: { type: [String], default: [], select: false },
+    resetTokenHash: { type: String, select: false, index: { sparse: true } },
+    resetTokenExpires: { type: Date, select: false },
   },
   { timestamps: true }
 );
