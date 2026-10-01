@@ -8,7 +8,7 @@ export default function AdminAuthLayout({ children }: { children: ReactNode }) {
       <header className="flex h-14 items-center justify-between px-4 sm:px-6">
         <span className="flex items-center gap-2 text-sm font-semibold tracking-tight">
           <ShieldCheck className="size-4" />
-          Shop Admin
+          Edwaso Admin
         </span>
         <ThemeToggle />
       </header>

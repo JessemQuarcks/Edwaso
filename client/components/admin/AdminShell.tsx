@@ -116,7 +116,7 @@ function Brand({ collapsed = false }: { collapsed?: boolean }) {
       </span>
       {!collapsed && (
         <span className="min-w-0 leading-tight">
-          <span className="block truncate text-base font-semibold tracking-tight">{storeName}</span>
+          <span className="block truncate text-base font-semibold tracking-tight">Edwaso</span>
           <span className="block text-xs text-muted-foreground">Admin</span>
         </span>
       )}

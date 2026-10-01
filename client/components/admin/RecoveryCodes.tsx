@@ -20,7 +20,7 @@ export default function RecoveryCodes({ codes }: { codes: string[] }) {
   }
 
   function download() {
-    const blob = new Blob([`Shop Admin recovery codes\nEach code can be used once.\n\n${text}\n`], {
+    const blob = new Blob([`Edwaso Admin recovery codes\nEach code can be used once.\n\n${text}\n`], {
       type: 'text/plain',
     });
     const url = URL.createObjectURL(blob);
