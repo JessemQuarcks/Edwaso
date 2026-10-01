@@ -27,7 +27,7 @@ const router = Router();
 export const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_MS = 15 * 60 * 1000;
 const RECOVERY_CODE_COUNT = 10;
-const TOTP_ISSUER = 'Shop Admin';
+const TOTP_ISSUER = 'Edwaso Admin';
 
 // Accept the current code plus one 30s step either side for clock drift.
 authenticator.options = { window: 1 };
