@@ -257,7 +257,7 @@ export default function Header({ categories }: { categories: CategoryInfo[] }) {
             <span className="flex size-8 items-center justify-center rounded-lg bg-foreground text-background">
               <ShoppingBag className="size-4" />
             </span>
-            <span className="hidden truncate sm:inline">{storeName}</span>
+            <span className="hidden truncate sm:inline">Edwaso</span>
           </Link>
 
           <nav className="hidden items-center gap-1 md:flex" aria-label="Main">

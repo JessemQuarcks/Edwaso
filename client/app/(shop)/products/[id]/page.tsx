@@ -75,7 +75,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
         <nav aria-label="Breadcrumb" className="mb-6 flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
           <Link href="/" className="hover:text-foreground">
-            Home
+            Edwaso
           </Link>
           <span aria-hidden>/</span>
           <Link href="/shop" className="hover:text-foreground">
