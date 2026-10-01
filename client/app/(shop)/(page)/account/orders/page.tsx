@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertCircle, ArrowRight, CreditCard, ExternalLink, Loader2, Package, PackageCheck, RotateCcw, Search, Truck, Wallet, XCircle } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, CreditCard, ExternalLink, Loader2, Package, PackageCheck, RotateCcw, Search, Truck, Wallet, XCircle } from 'lucide-react';
 import { api, errorMessage, formatPrice } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { groupOf, itemCount, longDate, orderNumber, reachedAt, statusLine, type OrderGroup } from '@/lib/customer-orders';
@@ -73,10 +73,13 @@ function Orders() {
 
   if (error) {
     return (
-      <Alert variant="destructive">
-        <AlertCircle />
-        <AlertDescription>{error}</AlertDescription>
-      </Alert>
+      <div className="flex flex-col gap-4">
+        <OrdersBackButton />
+        <Alert variant="destructive">
+          <AlertCircle />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      </div>
     );
   }
   if (!orders) return <OrdersSkeleton />;
@@ -85,6 +88,7 @@ function Orders() {
   if (placed.length === 0 && groups.awaiting.length === 0) {
     return (
       <div className="flex flex-col items-center gap-4 rounded-3xl border border-dashed py-16 text-center">
+        <OrdersBackButton />
         <Package className="size-10 text-muted-foreground" />
         <div>
           <p className="font-medium">No orders yet</p>
@@ -123,6 +127,7 @@ function Orders() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
+          <OrdersBackButton />
           <h2 className="text-2xl font-semibold tracking-tight">Orders & tracking</h2>
           <p className="text-sm text-muted-foreground">Follow what’s on its way and look back at everything you’ve bought.</p>
         </div>
@@ -202,6 +207,15 @@ function Orders() {
         </motion.div>
       </AnimatePresence>
     </div>
+  );
+}
+
+function OrdersBackButton() {
+  const router = useRouter();
+  return (
+    <button type="button" onClick={() => router.back()} className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+      <ArrowLeft className="size-4" /> Back
+    </button>
   );
 }
 

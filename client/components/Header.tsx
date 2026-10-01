@@ -109,9 +109,6 @@ function AccountMenu() {
         <DropdownMenuLinkItem render={<Link href="/account" />}>
           <User /> My account
         </DropdownMenuLinkItem>
-        <DropdownMenuLinkItem render={<Link href="/account/orders" />}>
-          <Package /> Orders
-        </DropdownMenuLinkItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={() => {

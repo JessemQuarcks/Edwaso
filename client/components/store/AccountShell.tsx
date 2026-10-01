@@ -4,14 +4,13 @@ import { useEffect, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
-import { KeyRound, LogOut, Package, User } from 'lucide-react';
+import { KeyRound, LogOut, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '../Providers';
 
 const NAV = [
   { href: '/account', label: 'Profile', icon: User },
-  { href: '/account/orders', label: 'Orders', icon: Package },
   { href: '/account/password', label: 'Password', icon: KeyRound },
 ];
 
@@ -33,6 +32,8 @@ export default function AccountShell({ children }: { children: ReactNode }) {
       </div>
     );
   }
+
+  if (pathname.startsWith('/account/orders')) return <>{children}</>;
 
   const active = (href: string) => (href === '/account' ? pathname === href : pathname.startsWith(href));
 
