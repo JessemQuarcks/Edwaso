@@ -4,7 +4,7 @@ export type StoreSettings = Omit<ISettings, 'key' | 'updatedAt'>;
 
 const envCurrency = (process.env.CURRENCY ?? 'usd').toLowerCase();
 const DEFAULTS: StoreSettings = {
-  storeName: 'Shop',
+  storeName: 'Edwaso',
   supportEmail: '',
   currency: (CURRENCIES as readonly string[]).includes(envCurrency) ? (envCurrency as Currency) : 'usd',
   shippingCountries: ['US', 'CA', 'GB'],
