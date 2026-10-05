@@ -1,0 +1,37 @@
+# Render Blueprint for the API (free plan). The storefront deploys separately on Vercel.
+# Values marked `sync: false` are asked for when the Blueprint is first created.
+services:
+  - type: web
+    name: edwaso-api
+    runtime: node
+    plan: free
+    rootDir: server
+    # NODE_ENV=production would make a plain `npm ci` skip typescript, which the build needs.
+    buildCommand: npm ci --include=dev && npm run build
+    # `npm start` reads a local .env file; on Render the variables come from the dashboard.
+    startCommand: node dist/index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      - key: MONGODB_URI
+        sync: false
+      # Random base64 256-bit values: DATA_ENCRYPTION_KEY must decode to exactly 32 bytes.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATA_ENCRYPTION_KEY
+        generateValue: true
+      # The Vercel storefront URL, exactly, with no trailing slash, e.g. https://edwaso.vercel.app
+      - key: CLIENT_URL
+        sync: false
+      # This service's own URL, e.g. https://edwaso-api.onrender.com
+      - key: PUBLIC_API_URL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
