@@ -16,7 +16,7 @@ export function imageHosts(): string[] {
     .map((h) => h.trim())
     .filter(Boolean);
   const api = apiOrigin();
-  return [...new Set(['picsum.photos', 'fastly.picsum.photos', ...(api ? [api.hostname] : []), ...extra])];
+  return [...new Set(['picsum.photos', 'fastly.picsum.photos', 'res.cloudinary.com',...(api ? [api.hostname] : []), ...extra])];
 }
 
 export function isOptimizable(src: string): boolean {
