@@ -20,11 +20,15 @@ services:
         value: "1"
       - key: MONGODB_URI
         sync: false
-      # Random base64 256-bit values: DATA_ENCRYPTION_KEY must decode to exactly 32 bytes.
       - key: JWT_SECRET
         generateValue: true
+      # Must be the key that encrypted the admins' 2FA secrets: when the database was copied
+      # with `npm run copy-db`, use the value from that environment's .env.
       - key: DATA_ENCRYPTION_KEY
-        generateValue: true
+        sync: false
+      # Uploaded images must live off-box: this plan's disk is wiped on every restart.
+      - key: CLOUDINARY_URL
+        sync: false
       # The Vercel storefront URL, exactly, with no trailing slash, e.g. https://edwaso.vercel.app
       - key: CLIENT_URL
         sync: false

@@ -169,6 +169,20 @@ Passwords are typed at a hidden prompt, never passed as arguments.
   API sits behind the same origin, and `API_ORIGIN` must point the Next.js server at the API.
 - Set `TRUST_PROXY` to match your load balancer so audit logs and rate limits see real client IPs.
 - Serve over https; the `__Host-` cookie prefix requires it.
+- On hosts whose disk is wiped on restart, set `CLOUDINARY_URL` so uploaded images go to Cloudinary.
+- `DATA_ENCRYPTION_KEY` must be the same everywhere a database is used, or admin 2FA codes are rejected.
+
+### Copying a database to production
+
+`npm run copy-db -- --yes` copies the database in `MONGODB_URI` into `TARGET_MONGODB_URI`, replacing
+the target's collections (admin sessions excepted). Images uploaded to local disk are re-uploaded
+through `CLOUDINARY_URL` and their links rewritten.
+
+```powershell
+$env:TARGET_MONGODB_URI="mongodb+srv://..."
+$env:CLOUDINARY_URL="cloudinary://..."
+npm run copy-db -- --yes
+```
 
 ## Scripts
 
