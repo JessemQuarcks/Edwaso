@@ -12,7 +12,8 @@
     "admin": "tsx --env-file=.env src/scripts/admin.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "demo": "tsx --env-file=.env src/scripts/demo-data.ts"
+    "demo": "tsx --env-file=.env src/scripts/demo-data.ts",
+    "copy-db": "tsx --env-file=.env src/scripts/copy-db.ts"
   },
   "engines": {
     "node": ">=20.6"
